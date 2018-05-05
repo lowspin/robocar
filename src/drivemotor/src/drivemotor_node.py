@@ -52,8 +52,7 @@ class MotorDriver():
     self.right_wheel = 0
 
     rospy.init_node('motordriver',anonymous=True)
-    rospy.Subscriber("joy_teleop/cmd_vel", Twist, self.callback)
-    #rospy.Subscriber("drive_cmd", Twist, self.callback)
+    rospy.Subscriber("driver_node/cmd_vel", Twist, self.callback)
     self.loop()
     #rospy.spin()
 
