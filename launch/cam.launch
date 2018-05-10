@@ -1,0 +1,7 @@
+<launch>
+    <!-- camera controller node -->
+    <include file="$(find camcontrol)/launch/cameracontrol.launch"/>
+
+    <!-- Motor driver node -->
+    <include file="$(find drivemotor)/launch/motors.launch"/>
+</launch>
