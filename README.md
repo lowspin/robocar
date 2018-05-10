@@ -30,3 +30,12 @@ roslaunch launch/blindmove.launch
 ```
 Note: Edit `src/blindmove/launch/drivecommands.csv` with one drive command per line in the following format:
 * `throttle`(-1.0:1.0), `steer`(-1.0:1.0), `duration`(sec)
+
+## Function: Camera Control Driving
+Using camera input to calculate drive commands.
+```
+catkin_make
+source devel/setup.bash
+roslaunch launch/cam.launch
+```
+Note: Work-in-progress (5/10/2018) 
