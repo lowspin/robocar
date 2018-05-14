@@ -27,16 +27,23 @@ def warp(img):
 
   return warped
 
-imgbuffer = np.empty((128*96*3,), dtype=np.uint8)
+imgbuffer = np.empty((IMG_WIDTH*IMG_HEIGHT*3,), dtype=np.uint8)
 
 with picamera.PiCamera() as camera:
 
     camera.resolution = (IMG_WIDTH, IMG_HEIGHT)
 
+    print 'position calibration sheet'
+    camera.start_preview()
+    time.sleep(10)
+    camera.stop_preview()
+
     camera.capture(imgbuffer,'bgr')
-    img = imgbuffer.reshape((96,128,3))
+    img = imgbuffer.reshape((IMG_HEIGHT,IMG_WIDTH,3))
 
     warped = warp(img)
     
     cv2.imwrite('original.jpg',img)
     cv2.imwrite('warped.jpg',warped)
+
+    print 'images updated'
