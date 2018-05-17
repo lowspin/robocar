@@ -1,6 +1,40 @@
 import numpy as np
 import cv2
 
+########################################
+# perspective transform function
+def warp(img):
+  img_size = (img.shape[1], img.shape[0])
+  src = np.float32(
+     [[43,26],
+      [38,58],
+      [90,26],
+      [96,58]])
+  dst = np.float32(
+     [[31,23],
+      [31,71],
+      [95,23],
+      [95,71]])
+  M = cv2.getPerspectiveTransform(src,dst)
+  warped = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
+  return warped
+
+# pick points for interpolation
+def pickpoints(img_bin):
+  nz = np.nonzero(img_bin)
+  pts_x = nz[1]
+  pts_y = nz[0]
+  return pts_x, pts_y
+
+def pickpoints2(img_bin):
+  pts_x = []
+  pts_y = []
+  # work in progress
+  return pts_x, pts_y
+
+#######################################
+
+
 # Sobel gradient in one direction and thresholding
 def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
     thresh_min = thresh[0]
