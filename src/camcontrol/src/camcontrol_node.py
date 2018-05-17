@@ -10,18 +10,33 @@ import imagefunctions
 import rospy
 from geometry_msgs.msg import Twist, TwistStamped
 
+from pid import PID
+
+# Params - to be moved to launch file later
 IMG_WIDTH = 128
 IMG_HEIGHT = 96
+MAX_THROTTLE_GAIN = 0.06
+MAX_STEER_GAIN = 1.5707
+FRAMERATE = 32
+PID_Kp = 1.0
+PID_Ki = 0.05
+PID_Kd = 20.0
 
 class CamNode(object):
 	
 	def __init__(self):
+
+
+                # initialize controller
+		self.steercontroller = PID(PID_Kp, PID_Ki, PID_Kd, -MAX_THROTTLE_GAIN, MAX_THROTTLE_GAIN)
+		self.my_twist_command = None
+
 		# initialize the camera and grab a reference to the raw camera capture
 		self.camera = PiCamera()
 		self.camera.resolution = (IMG_WIDTH, IMG_HEIGHT)
-		self.camera.framerate = 32
-		self.max_linear_vel = 0.06; #0.2;
-		self.max_angular_vel = 1.5707;
+		self.camera.framerate = FRAMERATE
+		self.max_linear_vel = MAX_THROTTLE_GAIN
+		self.max_angular_vel = MAX_STEER_GAIN
 
 		# allow the camera to warmup
 		time.sleep(0.1)
@@ -29,7 +44,6 @@ class CamNode(object):
 		# spin up ros
 		rospy.init_node('cam_control_node')
 		self.pub = rospy.Publisher('driver_node/cmd_vel', Twist, queue_size=1)
-		#self.pubStamped = rospy.Publisher('cmd_vel_stamp', TwistStamped, queue_size=10)
 	
 		self.loop()
 
@@ -43,17 +57,13 @@ class CamNode(object):
 			image = imgcapture.reshape((IMG_HEIGHT,IMG_WIDTH,3))
 
 			# process frame
-                        # vel = self.twist_from_frame(image, int((0.8*dt)*1000))
-                        vel = self.twist_from_frame(image)
+                        #self.twist_from_frame(image, dt, int((0.8*dt)*1000))
+                        self.twist_from_frame(image, dt)
 
 			# publish drive command
-	                self.pub.publish(vel)
-                        #print str(vel.linear.x) + ", " + str(vel.angular.z)
+	                self.pub.publish(self.my_twist_command)
 
-			# clear the stream in preparation for next frame
-			#self.rawCapture.truncate(0) 
-
-        def twist_from_frame(self, image, showtime=-1):
+        def twist_from_frame(self, image, dt, showtime=-1):
 		# prepare image
                 img_warped = imagefunctions.warp(image)
                 gray = cv2.cvtColor(img_warped, cv2.COLOR_BGR2GRAY)
@@ -84,7 +94,7 @@ class CamNode(object):
                     # plot line on image
                     out_img = cv2.cvtColor(img_bin,cv2.COLOR_GRAY2RGB)
                     cv2.polylines(out_img,[ptsplot],False,(0,255,0))
-                    cv2.line(colorimg,(int(IMG_WIDTH/2),IMG_HEIGHT-1),(int(IMG_WIDTH/2),int(IMG_HEIGHT/2)),(0,0,255),1)
+                    cv2.line(out_img,(int(IMG_WIDTH/2),IMG_HEIGHT-1),(int(IMG_WIDTH/2),int(IMG_HEIGHT/2)),(0,0,255),1)
                     cv2.imshow("Frame",out_img)
                     cv2.waitKey(showtime) # required to show image
 
@@ -96,16 +106,18 @@ class CamNode(object):
                 wt_ang = 2.0
                 cte = wt_dist*dist_to_line + wt_ang*ang_deviation 
 
+                # Controllers
+                throttle = MAX_THROTTLE_GAIN
+		steering = self.steercontroller.step( cte, dt )
+
                 # Twist Command
 		vel = Twist()
 		vel.linear.x = self.max_linear_vel
 		vel.angular.z = self.max_angular_vel*cte
-
                 print 'dist=' + str(dist_to_line) + " ang=" + str(ang_deviation) + " => throttle=" + str(vel.linear.x) + ", steer=" + str(vel.angular.z)
 
-		# return
-                return vel 
- 
+		# assign Twist Command
+		self.my_twist_command = vel
 
 if __name__ == '__main__':
 	try:
