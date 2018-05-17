@@ -9,6 +9,8 @@ import numpy as np
 import imagefunctions 
 import rospy
 from geometry_msgs.msg import Twist, TwistStamped
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge, CvBridgeError
 
 from pid import PID
 
@@ -44,7 +46,10 @@ class CamNode(object):
 		# spin up ros
 		rospy.init_node('cam_control_node')
 		self.pub = rospy.Publisher('driver_node/cmd_vel', Twist, queue_size=1)
-	
+
+		self.image_pub = rospy.Publisher('camera/image', Image)
+                self.bridge = CvBridge()
+
 		self.loop()
 
 	def loop(self): 
@@ -57,13 +62,12 @@ class CamNode(object):
 			image = imgcapture.reshape((IMG_HEIGHT,IMG_WIDTH,3))
 
 			# process frame
-                        #self.twist_from_frame(image, dt, int((0.8*dt)*1000))
                         self.twist_from_frame(image, dt)
 
 			# publish drive command
 	                self.pub.publish(self.my_twist_command)
 
-        def twist_from_frame(self, image, dt, showtime=-1):
+        def twist_from_frame(self, image, dt):
 		# prepare image
                 img_warped = imagefunctions.warp(image)
                 gray = cv2.cvtColor(img_warped, cv2.COLOR_BGR2GRAY)
@@ -73,14 +77,11 @@ class CamNode(object):
                 pts_x, pts_y = imagefunctions.pickpoints(img_bin)
 
                 # fit polynomial
-                if (len(pts_x)>0):
+                if (len(pts_x)>0 and len(pts_y)>0):
                     z = np.polyfit(pts_y, pts_x, 1)
-                else:
-                    z = [0, 0]
-                p = np.poly1d(z)
+	            p = np.poly1d(z)
 
-                # show the frame on screen
-                if (showtime>=0):
+                    # publish robot's view
                     # generate plot coordinates
                     numpts = 100
                     min_domain = min(pts_y)
@@ -95,8 +96,19 @@ class CamNode(object):
                     out_img = cv2.cvtColor(img_bin,cv2.COLOR_GRAY2RGB)
                     cv2.polylines(out_img,[ptsplot],False,(0,255,0))
                     cv2.line(out_img,(int(IMG_WIDTH/2),IMG_HEIGHT-1),(int(IMG_WIDTH/2),int(IMG_HEIGHT/2)),(0,0,255),1)
-                    cv2.imshow("Frame",out_img)
-                    cv2.waitKey(showtime) # required to show image
+                    #cv2.imshow("Frame",out_img)
+                    #cv2.waitKey(showtime) # required to show image
+
+    		    # publish 
+		    try:
+		        self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_img, "bgr8"))
+		    except CvBridgeError as e:
+		        print(e)
+
+                else:
+                    z = [0, 0]
+	            p = np.poly1d(z)
+
 
                 # cross track error
                 dist_to_line = p(IMG_HEIGHT) - (IMG_WIDTH/2) # +ve: line is to the right of car
