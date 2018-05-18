@@ -15,16 +15,16 @@ from cv_bridge import CvBridge, CvBridgeError
 from pid import PID
 
 # Params - to be moved to launch file later
-IMG_WIDTH = 128
-IMG_HEIGHT = 96
-MAX_THROTTLE_GAIN = 0.07
+IMG_WIDTH = 64
+IMG_HEIGHT = 48
+MAX_THROTTLE_GAIN = 0.08
 MAX_STEER_GAIN = 1.5707
-FRAMERATE = 32
-PID_Kp = 1.0
+PID_Kp = 2.0
 PID_Ki = 0.0
 PID_Kd = 0.0
 
 CAMNODE_DT = 0.1
+FRAMERATE = 50
 
 DEBUG = False
 
@@ -38,13 +38,17 @@ class CamNode(object):
 
         # initialize the camera and grab a reference to the raw camera capture
         self.camera = PiCamera()
-        self.camera.resolution = (IMG_WIDTH, IMG_HEIGHT)
+
+        # Use capture parameters consistent with camera mode 6, which doesn't crop.
+        self.camera.resolution = (640, 480)
         self.camera.framerate = FRAMERATE
+        self.camera.sensor_mode = 6
+
         self.max_linear_vel = MAX_THROTTLE_GAIN
         self.max_angular_vel = MAX_STEER_GAIN
 
         # allow the camera to warmup
-        time.sleep(0.1)
+        time.sleep(1.0)
 
         # spin up ros
         rospy.init_node('cam_control_node')
@@ -58,25 +62,25 @@ class CamNode(object):
     def loop(self): 
         dt = CAMNODE_DT
         rate = rospy.Rate(1/dt)
-        imgcapture = np.empty((IMG_WIDTH*IMG_HEIGHT*3,), dtype=np.uint8)
+
+        imgcapture = np.zeros((IMG_WIDTH*IMG_HEIGHT*3,), dtype=np.uint8)
 
         while not rospy.is_shutdown():
-            # capture one frame
-            self.camera.capture(imgcapture, 'bgr')
-            image = imgcapture.reshape((IMG_HEIGHT,IMG_WIDTH,3))
+            self.camera.capture(imgcapture, 'bgr', use_video_port=True, resize=(IMG_WIDTH, IMG_HEIGHT))
 
             # process frame
-            self.twist_from_frame(image, dt)
+            self.twist_from_frame(imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3), dt)
 
             # publish drive command
             self.pub.publish(self.my_twist_command)
 
+            rate.sleep()
+
     def twist_from_frame(self, image, dt):
+
         # prepare image
         img_warped = imagefunctions.warp(image)
-
         hsv = cv2.cvtColor(img_warped, cv2.COLOR_BGR2HSV)
-
         ret, img_bin = cv2.threshold(hsv[:, :, 1], 127, 255, cv2.THRESH_BINARY)
 
         if DEBUG:
@@ -85,7 +89,7 @@ class CamNode(object):
             from os import system; system('pwd')
             np.savez(fname, image=img_warped, hsv=hsv, img_bin=img_bin)
             print 'saved.'
-            time.sleep(4)
+            time.sleep(42)
         
         # pick points for interpolation
         pts_x, pts_y = imagefunctions.pickpoints(img_bin)
@@ -97,25 +101,23 @@ class CamNode(object):
 
             # publish robot's view
             # generate plot coordinates
-            numpts = 100
-            min_domain = min(pts_y)
-            max_domain = max(pts_y)
-            ploty = np.linspace(min_domain, max_domain, numpts)
+            ploty = [min(pts_y), max(pts_y)]
             plotx = p(ploty)
-            pts = np.stack((plotx,ploty))
+            pts = np.stack((plotx, ploty))
             pts = np.transpose(pts)
             pts = pts.reshape((-1,1,2))
             ptsplot = pts.astype(int)
+
             # plot line on image
-            out_img = cv2.cvtColor(img_bin,cv2.COLOR_GRAY2RGB)
-            cv2.polylines(out_img,[ptsplot],False,(0,255,0))
-            cv2.line(out_img,(int(IMG_WIDTH/2),IMG_HEIGHT-1),(int(IMG_WIDTH/2),int(IMG_HEIGHT/2)),(0,0,255),1)
-            #cv2.imshow("Frame",out_img)
-            #cv2.waitKey(showtime) # required to show image
+            lines_img = cv2.cvtColor(img_bin, cv2.COLOR_GRAY2RGB)
+            cv2.polylines(lines_img,[ptsplot],False,(0,255,0))
+            cv2.line(lines_img, (int(IMG_WIDTH/2), IMG_HEIGHT-1), (int(IMG_WIDTH/2), int(IMG_HEIGHT/2)), (0,0,255), 1)
+
+            out_tile = np.hstack([img_warped, lines_img])
 
             # publish 
             try:
-                self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_img, "bgr8"))
+                self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_tile, "bgr8"))
             except CvBridgeError as e:
                 print(e)
 
@@ -127,7 +129,7 @@ class CamNode(object):
         dist_to_line = p(IMG_HEIGHT) - (IMG_WIDTH/2) # +ve: line is to the right of car
         slope = z[0] # np.arctan2
         ang_deviation = -slope # +ve: line deviates to right of car
-        wt_dist = 1./2/64
+        wt_dist = 1./2/IMG_WIDTH
         wt_ang = 1./2/3.14159
         cte = wt_dist*dist_to_line + wt_ang*ang_deviation 
 
