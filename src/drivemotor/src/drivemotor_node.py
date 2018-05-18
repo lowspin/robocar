@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+DRIVENODE_DT = 0.05
+
 from Adafruit_MotorHAT import Adafruit_MotorHAT, Adafruit_DCMotor
 
 import rospy
@@ -68,7 +70,7 @@ class MotorDriver():
 
   def loop(self):
 
-    dt = 0.2
+    dt = DRIVENODE_DT
     rate = rospy.Rate(1/dt)
 
     while not rospy.is_shutdown():

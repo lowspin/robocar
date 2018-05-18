@@ -17,19 +17,23 @@ from pid import PID
 # Params - to be moved to launch file later
 IMG_WIDTH = 128
 IMG_HEIGHT = 96
-MAX_THROTTLE_GAIN = 0.06
+MAX_THROTTLE_GAIN = 0.07
 MAX_STEER_GAIN = 1.5707
 FRAMERATE = 32
 PID_Kp = 1.0
-PID_Ki = 0.05
-PID_Kd = 20.0
+PID_Ki = 0.0
+PID_Kd = 0.0
+
+CAMNODE_DT = 0.1
+
+DEBUG = False
 
 class CamNode(object):
     
     def __init__(self):
 
         # initialize controller
-        self.steercontroller = PID(PID_Kp, PID_Ki, PID_Kd, -MAX_THROTTLE_GAIN, MAX_THROTTLE_GAIN)
+        self.steercontroller = PID(PID_Kp, PID_Ki, PID_Kd, -MAX_STEER_GAIN, MAX_STEER_GAIN)
         self.my_twist_command = None
 
         # initialize the camera and grab a reference to the raw camera capture
@@ -52,9 +56,10 @@ class CamNode(object):
         self.loop()
 
     def loop(self): 
-        dt = 0.2
+        dt = CAMNODE_DT
         rate = rospy.Rate(1/dt)
         imgcapture = np.empty((IMG_WIDTH*IMG_HEIGHT*3,), dtype=np.uint8)
+
         while not rospy.is_shutdown():
             # capture one frame
             self.camera.capture(imgcapture, 'bgr')
@@ -64,13 +69,23 @@ class CamNode(object):
             self.twist_from_frame(image, dt)
 
             # publish drive command
-            self.pub.publish(self.my_twist_command) 
+            self.pub.publish(self.my_twist_command)
 
     def twist_from_frame(self, image, dt):
         # prepare image
         img_warped = imagefunctions.warp(image)
-        gray = cv2.cvtColor(img_warped, cv2.COLOR_BGR2GRAY)
-        ret,img_bin = cv2.threshold(gray,127,255,cv2.THRESH_BINARY)
+
+        hsv = cv2.cvtColor(img_warped, cv2.COLOR_BGR2HSV)
+
+        ret, img_bin = cv2.threshold(hsv[:, :, 1], 127, 255, cv2.THRESH_BINARY)
+
+        if DEBUG:
+            fname = 'image.npz'
+            print 'Saving %s ...' % fname,
+            from os import system; system('pwd')
+            np.savez(fname, image=img_warped, hsv=hsv, img_bin=img_bin)
+            print 'saved.'
+            time.sleep(4)
         
         # pick points for interpolation
         pts_x, pts_y = imagefunctions.pickpoints(img_bin)
@@ -112,18 +127,18 @@ class CamNode(object):
         dist_to_line = p(IMG_HEIGHT) - (IMG_WIDTH/2) # +ve: line is to the right of car
         slope = z[0] # np.arctan2
         ang_deviation = -slope # +ve: line deviates to right of car
-        wt_dist = 0.005
-        wt_ang = 2.0
+        wt_dist = 1./2/64
+        wt_ang = 1./2/3.14159
         cte = wt_dist*dist_to_line + wt_ang*ang_deviation 
 
         # Controllers
         throttle = MAX_THROTTLE_GAIN
-        steering = self.steercontroller.step( cte, dt )
+        steering = self.steercontroller.step(cte, dt)
 
         # Twist Command
         vel = Twist()
-        vel.linear.x = self.max_linear_vel
-        vel.angular.z = self.max_angular_vel*cte
+        vel.linear.x = min(self.max_linear_vel, throttle)
+        vel.angular.z = steering
         print 'dist=' + str(dist_to_line) + " ang=" + str(ang_deviation) + " => throttle=" + str(vel.linear.x) + ", steer=" + str(vel.angular.z)
 
         # assign Twist Command
