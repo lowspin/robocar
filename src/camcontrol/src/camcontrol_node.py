@@ -26,7 +26,6 @@ PID_Kd = 0.0
 CAMNODE_DT = 0.1
 FRAMERATE = 50
 
-DEBUG = False
 
 class CamNode(object):
     
@@ -82,13 +81,6 @@ class CamNode(object):
         img_warped = imagefunctions.warp(image)
         hsv = cv2.cvtColor(img_warped, cv2.COLOR_BGR2HSV)
         ret, img_bin = cv2.threshold(hsv[:, :, 1], 127, 255, cv2.THRESH_BINARY)
-
-        if DEBUG:
-            fname = 'image.npz'
-            from os import system; system('pwd')
-            np.savez(fname, image=img_warped, hsv=hsv, img_bin=img_bin)
-            print('saved', fname)
-            time.sleep(42)
         
         # pick points for interpolation
         pts_x, pts_y = imagefunctions.pickpoints(img_bin)
