@@ -17,7 +17,6 @@ class PID(object):
         self.last_int_val = 0.0
 
     def step(self, error, sample_time):
-
         derivative = (error - self.last_error)
         self.int_val = derivative + error
         self.last_error = error

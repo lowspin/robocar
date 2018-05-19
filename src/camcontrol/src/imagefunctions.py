@@ -4,34 +4,37 @@ import cv2
 ########################################
 # perspective transform function
 def warp(img):
-  img_size = (img.shape[1], img.shape[0])
-  src = np.float32(
-     [[43,26],
-      [38,58],
-      [90,26],
-      [96,58]])
-  dst = np.float32(
-     [[31,23],
-      [31,71],
-      [95,23],
-      [95,71]])
-  M = cv2.getPerspectiveTransform(src,dst)
-  warped = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
-  return warped
+    img_size = (img.shape[1], img.shape[0])
+    src = np.float32(
+        [[43,26],
+         [38,58],
+         [90,26],
+         [96,58]]
+    )
+    dst = np.float32(
+        [[31,23],
+         [31,71],
+         [95,23],
+         [95,71]]
+    )
+    M = cv2.getPerspectiveTransform(src, dst)
+    warped = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
+    return warped
+
 
 # pick points for interpolation
 def pickpoints(img_bin):
-  nz = np.nonzero(img_bin)
-  pts_x = nz[1]
-  pts_y = nz[0]
-  return pts_x, pts_y
+    nz = np.nonzero(img_bin)
+    pts_x = nz[1]
+    pts_y = nz[0]
+    return pts_x, pts_y
+
 
 def pickpoints2(img_bin):
-  pts_x = []
-  pts_y = []
-  # work in progress
-  return pts_x, pts_y
-
+    pts_x = []
+    pts_y = []
+    # work in progress
+    return pts_x, pts_y
 #######################################
 
 
@@ -45,9 +48,9 @@ def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
     # Apply x or y gradient with the OpenCV Sobel() function
     # and take the absolute value
     if orient == 'x':
-        abs_sobel = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel))
+            abs_sobel = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel))
     if orient == 'y':
-        abs_sobel = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel))
+            abs_sobel = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel))
     # Rescale back to 8 bit integer
     scaled_sobel = abs_sobel #np.uint8(255*abs_sobel/np.max(abs_sobel))
     # Create a copy and apply the threshold
@@ -57,6 +60,7 @@ def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
 
     # Return the result
     return binary_output
+
 
 # Magnitude of the gradient
 def mag_thresh(img, sobel_kernel=3, mag_thresh=(0, 255)):
@@ -77,6 +81,7 @@ def mag_thresh(img, sobel_kernel=3, mag_thresh=(0, 255)):
     # Return the binary image
     return binary_output
 
+
 # Direction of the Gradient
 def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
     # Grayscale
@@ -87,11 +92,12 @@ def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
     # Take the absolute value of the gradient direction,
     # apply a threshold, and create a binary image result
     absgraddir = np.arctan2(np.absolute(sobely), np.absolute(sobelx))
-    binary_output =  np.zeros_like(absgraddir)
+    binary_output =    np.zeros_like(absgraddir)
     binary_output[(absgraddir >= thresh[0]) & (absgraddir <= thresh[1])] = 1
 
     # Return the binary image
     return binary_output
+
 
 def extractpixels(imgBGR, plotall=False, plotid=0):
     ###############################################
@@ -115,28 +121,29 @@ def extractpixels(imgBGR, plotall=False, plotid=0):
     # Return the combined image
     return combined
 
-#    # extract s-channel of HLS colorspace
-#    hls = cv2.cvtColor(imgBGR, cv2.COLOR_BGR2HLS)
-#    s_channel = hls[:,:,2]
+
+#        # extract s-channel of HLS colorspace
+#        hls = cv2.cvtColor(imgBGR, cv2.COLOR_BGR2HLS)
+#        s_channel = hls[:,:,2]
 #
-#    # Threshold color channel
-#    s_thresh_min = 0
-#    s_thresh_max = 255
-#    s_binary = np.zeros_like(s_channel)
-#    s_binary[(s_channel >= s_thresh_min) & (s_channel <= s_thresh_max)] = 1
+#        # Threshold color channel
+#        s_thresh_min = 0
+#        s_thresh_max = 255
+#        s_binary = np.zeros_like(s_channel)
+#        s_binary[(s_channel >= s_thresh_min) & (s_channel <= s_thresh_max)] = 1
 #
-#    combined2 = np.zeros_like(dir_binary)
-#    combined2[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1)) | (s_binary == 1)] = 1
+#        combined2 = np.zeros_like(dir_binary)
+#        combined2[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1)) | (s_binary == 1)] = 1
 #
-#    # Return the combined image
-#    return combined
+#        # Return the combined image
+#        return combined
 
 def perspectiveTransform(undst_rgb, img_bin, plotall=False, plotid=0):
     # Define perspective transformation area
     img_size = (img_bin.shape[1], img_bin.shape[0]) #(1280, 720)
 
-	#[8,220],[200,30],[410,30],[640,220]
-	#[0,290],[200,100],[440,100],[640,290]
+    #[8,220],[200,30],[410,30],[640,220]
+    #[0,290],[200,100],[440,100],[640,290]
     top_left_src = [200,100] #[578, 460]
     top_right_src = [440,100] #[702, 460]
     bottom_right_src = [640,290] #[1088, 720]
@@ -158,24 +165,26 @@ def perspectiveTransform(undst_rgb, img_bin, plotall=False, plotid=0):
 
     return M, Minv, warped, warped_bin
 
-def rect_is_all_white(img_bin,x1,y1,x2,y2):
-	if (np.amax(img_bin[y1:y2,x1:x2])>0.):
-		return False
-	else:
-		return True
+
+def rect_is_all_white(img_bin, x1, y1, x2, y2):
+    if (np.amax(img_bin[y1:y2, x1:x2])>0.):
+        return False
+    else:
+        return True
+
 
 def find_white_patch(img_bin):
-	nrows=480 # img_bin.shape[0] #480
-	ncols=640 # img_bin.shape[1] #640
-	xstep = 10
-	for ss in range(nrows,10,-10):
-		xtravel = int((ncols-ss)/2/xstep)
-		for xx in range(0,xtravel+1):	
-			xshift = xx*xstep	
-			#shift left
-			if rect_is_all_white(img_bin,int(ncols/2-ss/2-xshift),nrows-ss,int(ncols/2+ss/2-xshift),nrows):
-				return ss, -xshift
-			#shift right
-			if rect_is_all_white(img_bin,int(ncols/2-ss/2+xshift),nrows-ss,int(ncols/2+ss/2+xshift),nrows):
-				return ss, xshift
-	return -1,0 
+    nrows = 480 # img_bin.shape[0] #480
+    ncols = 640 # img_bin.shape[1] #640
+    xstep = 10
+    for ss in range(nrows, 10, -10):
+        xtravel = int((ncols - ss) / 2 / xstep)
+        for xx in range(0,xtravel+1):    
+            xshift = xx * xstep    
+            #shift left
+            if rect_is_all_white(img_bin, int(ncols/2 - ss/2 - xshift), nrows-ss, int(ncols/2 + ss/2 - xshift), nrows):
+                return ss, -xshift
+            #shift right
+            if rect_is_all_white(img_bin, int(ncols/2 - ss/2 + xshift), nrows-ss, int(ncols/2 + ss/2 + xshift), nrows):
+                return ss, xshift
+    return -1, 0 
