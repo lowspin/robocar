@@ -85,10 +85,9 @@ class CamNode(object):
 
         if DEBUG:
             fname = 'image.npz'
-            print 'Saving %s ...' % fname,
             from os import system; system('pwd')
             np.savez(fname, image=img_warped, hsv=hsv, img_bin=img_bin)
-            print 'saved.'
+            print('saved', fname)
             time.sleep(42)
         
         # pick points for interpolation
@@ -105,12 +104,12 @@ class CamNode(object):
             plotx = p(ploty)
             pts = np.stack((plotx, ploty))
             pts = np.transpose(pts)
-            pts = pts.reshape((-1,1,2))
+            pts = pts.reshape((-1, 1, 2))
             ptsplot = pts.astype(int)
 
             # plot line on image
             lines_img = cv2.cvtColor(img_bin, cv2.COLOR_GRAY2RGB)
-            cv2.polylines(lines_img,[ptsplot],False,(0,255,0))
+            cv2.polylines(lines_img, [ptsplot], False, (0,255,0))
             cv2.line(lines_img, (int(IMG_WIDTH/2), IMG_HEIGHT-1), (int(IMG_WIDTH/2), int(IMG_HEIGHT/2)), (0,0,255), 1)
 
             out_tile = np.hstack([img_warped, lines_img])

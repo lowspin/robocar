@@ -6,16 +6,18 @@ import cv2
 def warp(img):
     img_size = (img.shape[1], img.shape[0])
     src = np.float32(
-         [[43,26],
-            [38,58],
-            [90,26],
-            [96,58]])
+        [[43,26],
+         [38,58],
+         [90,26],
+         [96,58]]
+    )
     dst = np.float32(
-         [[31,23],
-            [31,71],
-            [95,23],
-            [95,71]])
-    M = cv2.getPerspectiveTransform(src,dst)
+        [[31,23],
+         [31,71],
+         [95,23],
+         [95,71]]
+    )
+    M = cv2.getPerspectiveTransform(src, dst)
     warped = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
     return warped
 
@@ -59,6 +61,7 @@ def abs_sobel_thresh(img, orient='x', sobel_kernel=3, thresh=(0, 255)):
     # Return the result
     return binary_output
 
+
 # Magnitude of the gradient
 def mag_thresh(img, sobel_kernel=3, mag_thresh=(0, 255)):
     # Convert to grayscale
@@ -78,6 +81,7 @@ def mag_thresh(img, sobel_kernel=3, mag_thresh=(0, 255)):
     # Return the binary image
     return binary_output
 
+
 # Direction of the Gradient
 def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
     # Grayscale
@@ -93,6 +97,7 @@ def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
 
     # Return the binary image
     return binary_output
+
 
 def extractpixels(imgBGR, plotall=False, plotid=0):
     ###############################################
@@ -115,6 +120,7 @@ def extractpixels(imgBGR, plotall=False, plotid=0):
 
     # Return the combined image
     return combined
+
 
 #        # extract s-channel of HLS colorspace
 #        hls = cv2.cvtColor(imgBGR, cv2.COLOR_BGR2HLS)
@@ -159,24 +165,26 @@ def perspectiveTransform(undst_rgb, img_bin, plotall=False, plotid=0):
 
     return M, Minv, warped, warped_bin
 
-def rect_is_all_white(img_bin,x1,y1,x2,y2):
-    if (np.amax(img_bin[y1:y2,x1:x2])>0.):
+
+def rect_is_all_white(img_bin, x1, y1, x2, y2):
+    if (np.amax(img_bin[y1:y2, x1:x2])>0.):
         return False
     else:
         return True
 
+
 def find_white_patch(img_bin):
-    nrows=480 # img_bin.shape[0] #480
-    ncols=640 # img_bin.shape[1] #640
+    nrows = 480 # img_bin.shape[0] #480
+    ncols = 640 # img_bin.shape[1] #640
     xstep = 10
-    for ss in range(nrows,10,-10):
-        xtravel = int((ncols-ss)/2/xstep)
+    for ss in range(nrows, 10, -10):
+        xtravel = int((ncols - ss) / 2 / xstep)
         for xx in range(0,xtravel+1):    
-            xshift = xx*xstep    
+            xshift = xx * xstep    
             #shift left
-            if rect_is_all_white(img_bin,int(ncols/2-ss/2-xshift),nrows-ss,int(ncols/2+ss/2-xshift),nrows):
+            if rect_is_all_white(img_bin, int(ncols/2 - ss/2 - xshift), nrows-ss, int(ncols/2 + ss/2 - xshift), nrows):
                 return ss, -xshift
             #shift right
-            if rect_is_all_white(img_bin,int(ncols/2-ss/2+xshift),nrows-ss,int(ncols/2+ss/2+xshift),nrows):
+            if rect_is_all_white(img_bin, int(ncols/2 - ss/2 + xshift), nrows-ss, int(ncols/2 + ss/2 + xshift), nrows):
                 return ss, xshift
-    return -1,0 
+    return -1, 0 

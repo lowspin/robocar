@@ -53,7 +53,7 @@ class MotorDriver():
     self.left_wheel = 0
     self.right_wheel = 0
 
-    rospy.init_node('motordriver',anonymous=True)
+    rospy.init_node('motordriver', anonymous=True)
     rospy.Subscriber("driver_node/cmd_vel", Twist, self.callback)
     self.loop()
     #rospy.spin()
@@ -62,9 +62,9 @@ class MotorDriver():
     max_vel = 0.2 # set in joystick control node
     max_angle = 1.5707
     wheeldist = 0.1
-    gain  = 255 / (max_vel+(max_angle*wheeldist)) # 700
-    self.left_wheel = math.trunc(gain*(twist.linear.x + twist.angular.z*wheeldist))
-    self.right_wheel = math.trunc(gain*(twist.linear.x - twist.angular.z*wheeldist))
+    gain  = 255 / (max_vel + (max_angle * wheeldist)) # 700
+    self.left_wheel = math.trunc(gain * (twist.linear.x + twist.angular.z * wheeldist))
+    self.right_wheel = math.trunc(gain * (twist.linear.x - twist.angular.z * wheeldist))
 
     #rospy.loginfo("twist.x: " + str(twist.linear.x) + " twist.az: " + str(twist.angular.z) + " left: " + str(self.left_wheel) + " right: " + str(self.right_wheel) )
 
