@@ -30,10 +30,16 @@ def pickpoints(img_bin):
     return pts_x, pts_y
 
 
-def pickpoints2(img_bin):
+def pickpoints2(img_bin,minx=0,miny=0,maxx=999999,maxy=999999):
+    nz = np.nonzero(img_bin)
+    all_x = nz[1]
+    all_y = nz[0]
     pts_x = []
     pts_y = []
-    # work in progress
+    for x,y in zip(all_x,all_y):
+        if (x>=minx and x<=maxx and y>=miny and y<=maxy):
+            pts_x.append(x)
+            pts_y.append(y)
     return pts_x, pts_y
 #######################################
 
