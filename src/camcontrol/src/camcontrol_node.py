@@ -11,29 +11,38 @@ import rospy
 from geometry_msgs.msg import Twist, TwistStamped
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
-
 from pid import PID
 
-# Params - to be moved to launch file later
-IMG_WIDTH = 64
-IMG_HEIGHT = 48
+# Tuning Params 
+IMG_WIDTH = 128
+IMG_HEIGHT = 96
+
 MAX_THROTTLE_GAIN = 0.08
 MAX_STEER_GAIN = 1.5707
 PID_Kp = 2.0
-PID_Ki = 0.0
-PID_Kd = 0.0
+PID_Ki = 0.2
+PID_Kd = 0.1
+
+line_pixel_threshold = 10
+wt_dist = 1./2/IMG_WIDTH
+wt_ang = 1./2/3.14159
 
 CAMNODE_DT = 0.1
 FRAMERATE = 50
 
-
+# Main Camera Node Class
 class CamNode(object):
     
     def __init__(self):
 
         # initialize controller
         self.steercontroller = PID(PID_Kp, PID_Ki, PID_Kd, -MAX_STEER_GAIN, MAX_STEER_GAIN)
-        self.my_twist_command = None
+
+        # Initial Twist Command
+        vel = Twist()
+        vel.linear.x = 0
+        vel.angular.z = 0
+        self.my_twist_command = vel
 
         # initialize the camera and grab a reference to the raw camera capture
         self.camera = PiCamera()
@@ -45,6 +54,12 @@ class CamNode(object):
 
         self.max_linear_vel = MAX_THROTTLE_GAIN
         self.max_angular_vel = MAX_STEER_GAIN
+
+        # search region for line pixels
+        self.minx = 0
+        self.miny = 0
+        self.maxx = 999999
+        self.maxy = 999999
 
         # allow the camera to warmup
         time.sleep(1.0)
@@ -80,17 +95,25 @@ class CamNode(object):
         # prepare image
         img_warped = imagefunctions.warp(image)
         hsv = cv2.cvtColor(img_warped, cv2.COLOR_BGR2HSV)
-        ret, img_bin = cv2.threshold(hsv[:, :, 1], 127, 255, cv2.THRESH_BINARY)
+        ret, img_bin = cv2.threshold(hsv[:, :, 1], 100, 255, cv2.THRESH_BINARY)
         
         # pick points for interpolation
-        pts_x, pts_y = imagefunctions.pickpoints(img_bin)
+        #pts_x, pts_y = imagefunctions.pickpoints(img_bin)
+        pts_x, pts_y = imagefunctions.pickpoints2(img_bin, self.minx-10,self.miny-10,self.maxx+10,self.maxy+10)
 
         # fit polynomial
-        if (len(pts_x)>0 and len(pts_y)>0):
+        if (len(pts_x)>line_pixel_threshold and len(pts_y)>line_pixel_threshold):
+
+            # update search region
+            self.minx = min(pts_x)
+            self.maxx = max(pts_x)
+            self.miny = min(pts_y)
+            self.maxy = max(pts_y)
+
+            # fit linr
             z = np.polyfit(pts_y, pts_x, 1)
             p = np.poly1d(z)
 
-            # publish robot's view
             # generate plot coordinates
             ploty = [min(pts_y), max(pts_y)]
             plotx = p(ploty)
@@ -106,36 +129,47 @@ class CamNode(object):
 
             out_tile = np.hstack([img_warped, lines_img])
 
-            # publish 
+            # publish robot's view
             try:
                 self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_tile, "bgr8"))
             except CvBridgeError as e:
                 print(e)
 
+            # cross track error
+            dist_to_line = p(IMG_HEIGHT) - (IMG_WIDTH/2) # +ve: line is to the right of car
+            slope = z[0] # np.arctan2
+            ang_deviation = -slope # +ve: line deviates to right of car
+
+            cte = wt_dist*dist_to_line + wt_ang*ang_deviation 
+
+            # Controllers
+            throttle = MAX_THROTTLE_GAIN
+            steering = self.steercontroller.step(cte, dt)
+
+            # Twist Command
+            vel = Twist()
+            vel.linear.x = min(self.max_linear_vel, throttle)
+            vel.angular.z = steering
+            print 'dist=' + str(dist_to_line) + " ang=" + str(ang_deviation) + " => throttle=" + str(vel.linear.x) + ", steer=" + str(vel.angular.z)
+
+            # update Twist Command
+            self.my_twist_command = vel
+	
         else:
-            z = [0, 0]
-            p = np.poly1d(z)
+            # publish robot's view
+            # plot line on image
+            lines_img = cv2.cvtColor(img_bin, cv2.COLOR_GRAY2RGB)
+            cv2.line(lines_img, (int(IMG_WIDTH/2), IMG_HEIGHT-1), (int(IMG_WIDTH/2), int(IMG_HEIGHT/2)), (0,0,255), 1)
 
-        # cross track error
-        dist_to_line = p(IMG_HEIGHT) - (IMG_WIDTH/2) # +ve: line is to the right of car
-        slope = z[0] # np.arctan2
-        ang_deviation = -slope # +ve: line deviates to right of car
-        wt_dist = 1./2/IMG_WIDTH
-        wt_ang = 1./2/3.14159
-        cte = wt_dist*dist_to_line + wt_ang*ang_deviation 
+            out_tile = np.hstack([img_warped, lines_img])
 
-        # Controllers
-        throttle = MAX_THROTTLE_GAIN
-        steering = self.steercontroller.step(cte, dt)
+            # publish robot's view
+            try:
+                self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_tile, "bgr8"))
+            except CvBridgeError as e:
+                print(e)
 
-        # Twist Command
-        vel = Twist()
-        vel.linear.x = min(self.max_linear_vel, throttle)
-        vel.angular.z = steering
-        print 'dist=' + str(dist_to_line) + " ang=" + str(ang_deviation) + " => throttle=" + str(vel.linear.x) + ", steer=" + str(vel.angular.z)
-
-        # assign Twist Command
-        self.my_twist_command = vel
+            print 'xxxxxxxxxx LOST LINE xxxxxxxx'
 
 if __name__ == '__main__':
     try:
