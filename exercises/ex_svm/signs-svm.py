@@ -6,11 +6,10 @@ import cv2
 from sklearn import svm
 import random
 import pandas as pd
+import ImageFunctions as imagefunctions
 
 # Load pickled data
-data_file = 'data.p'
-with open(data_file, mode='rb') as f:
-    data_all = pickle.load(f)
+data_all = pickle.load(open('data.p', 'rb'))
 
 X_all, y_all = data_all['images'], data_all['labels']
 X_train, X_test, y_train, y_test = train_test_split(X_all, y_all, test_size=0.20, random_state=42)
@@ -27,9 +26,10 @@ y_test = np.array(y_test)
 X_rot = []
 y_rot = []
 for X,y in zip(X_train,y_train):
-    imrot = np.rot90(X,2)
-    X_rot.append(imrot)
-    y_rot.append(y)
+    for r in range(1,4):
+        imrot = np.rot90(X,r)
+        X_rot.append(imrot)
+        y_rot.append(y)
 X_train = np.append(X_train, X_rot, axis=0)
 y_train = np.append(y_train, y_rot)
 
@@ -43,96 +43,20 @@ image_shape = X_train[0].shape
 # How many unique classes/labels there are in the dataset.
 classes = np.unique(y_train)
 
-print "Final training samples: " + str(n_train)
-print "Final testing samples: " + str(n_test)
+print('Images loaded.')
+print "Training samples: " + str(n_train)
+print "Testing samples: " + str(n_test)
 print "Image data shape: " + str(image_shape)
 print "Classes: " + str(classes) + "\n"
+# ------------------------------------------------------------------ #
 
-# sample images
-def get_sample_images(X, y, plotfig=False):
-    labels = y.tolist()
-    unique_labels = set(labels)
-    X_samples = []
-    y_samples = []
-    for label in unique_labels:
-        # Pick the first image for each label.
-        image = X[labels.index(label)]
-        X_samples.append(image)
-        y_samples.append(label)
-
-    X_samples = np.asarray(X_samples)
-    y_samples = np.asarray(y_samples)
-
-    if plotfig:
-        # plot sample images
-        plt.figure(figsize=(15, 15))
-        for i in range(X_samples.shape[0]):
-            image = X_samples[i].squeeze()
-            plt.subplot(8, 8, i+1)  # A grid of 8 rows x 8 columns
-            plt.axis('off')
-            plt.title(y_samples[i] + "(" + str(labels.count(i)) +")")
-            plt.imshow(image)
-        plt.show()
-    return X_samples, y_samples
-X_samples, y_samples = get_sample_images(X_train, y_train, False) #True)
-
-# Pre-process
-def preprocess_grayscale(X):
-
-    ## Grayscale
-    X_gray = np.dot(X[...][...,:3],[0.299,0.587,0.114])
-
-    ## Histogram Equalization (Improve contrast)
-    X_gray_eq = np.zeros(shape=X_gray.shape)
-    for i in range(X_gray.shape[0]):
-        img = cv2.equalizeHist(X_gray[i].squeeze().astype(np.uint8))
-        X_gray_eq[i] = img
-
-    ## scale to [0,1]
-    X_gray_eq_scale = np.divide(X_gray_eq,255.0)
-
-    ## expand to fit dimensions
-    X_prep = np.expand_dims(X_gray_eq_scale, axis=3)
-
-    return X_prep
-
-def equalize_Y_channel(img):
-    img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
-
-    # equalize the histogram of the Y channel
-    img_yuv[:,:,0] = cv2.equalizeHist(img_yuv[:,:,0])
-
-    # convert the YUV image back to RGB format
-    img_output = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
-
-    return img_output
-
-def preprocess_rgb(X):
-
-    ## Histogram Equalization (Improve contrast)
-    X_eq = np.zeros(shape=X.shape)
-    for i in range(X.shape[0]):
-        img = X[i].squeeze().astype(np.uint8)
-        X_eq[i] = equalize_Y_channel(img)
-
-    ## scale to [0,1]
-    X_eq_scale = np.divide(X_eq,255.0)
-
-    return X_eq_scale
-
-#Number of channels to process - 1:grayscale, 3:RGB
-proc_num_channels = 3
-
-if (proc_num_channels==1):
-    ## Pre-Process: Grayscale
-    X_train_prep = preprocess_grayscale(X_train)
-    X_test_prep = preprocess_grayscale(X_test)
-elif (proc_num_channels==3):
-    ## Pre-Process: RGB
-    X_train_prep = preprocess_rgb(X_train)
-    X_test_prep = preprocess_rgb(X_test)
-else:
-    print('Please select ONLY 1 or 3 channels')
+# Pre-Process
+## Pre-Process: RGB
+X_train_prep = imagefunctions.preprocess_rgb(X_train)
+X_test_prep = imagefunctions.preprocess_rgb(X_test)
+## Pre-Process: Grayscale
+#X_train_prep = imagefunctions.preprocess_grayscale(X_train)
+#X_test_prep = imagefunctions.preprocess_grayscale(X_test)
 
 # check quality after pre-processing
 check_quality = False
@@ -157,70 +81,128 @@ if (check_quality):
 X_train = X_train_prep
 X_test = X_test_prep
 
-print('All pre-processing done.')
+print('Pre-processing done.')
+# ------------------------------------------------------------------ #
 
-# Support Vector Machine
-def num_white_pixels(img):
-    img = np.array(img, dtype=np.float32)
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    ret, img_bin = cv2.threshold(gray, 0.8, 1., cv2.THRESH_BINARY)
-    return np.sum(img_bin)/(50*50)
-def num_red_pixels(img):
-    img = np.array(img, dtype=np.float32)
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    ret, img_bin = cv2.threshold(hsv[:, :, 1], .4, 1., cv2.THRESH_BINARY)
-    return np.sum(img_bin)/(50*50)
-def num_edges(img):
-    img = np.array(img, dtype=np.float32)
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    gray = np.float32(gray)
-    dst = cv2.cornerHarris(gray,2,3,0.1)
-    return np.sum(dst>0.01*dst.max())
+def getFeatures(img):
+    return [
+        imagefunctions.num_corners(img),
+        imagefunctions.num_edges(img),
+        imagefunctions.num_red_pixels(img),
+        imagefunctions.num_white_pixels(img),
+        imagefunctions.abs_sobel_thresh(img, orient='y', sobel_kernel=3, thresh=(100, 200)),
+        imagefunctions.mag_thresh(img, sobel_kernel=5, mag_thresh=(100, 180)),
+        imagefunctions.dir_threshold(img, sobel_kernel=3, thresh=(np.pi/8, np.pi/4))
+    ]
 
 # Extract features
 Features_train = []
 features = []
-f0 = []
-f1 = []
-f2 = []
 for x,y in zip(X_train,y_train):
-    features = [num_edges(x),num_red_pixels(x)]#,num_white_pixels(x)]
+    features = getFeatures(x)  #[num_corners(x),num_red_pixels(x)]#,num_white_pixels(x)]
     Features_train.append(features)
+
+def normalize_features(feature_vector,fmn,fsd):
+    numDim = len(feature_vector)
+    normFeatures = []
+    normfeat = [None]*numDim
+    for i in range(numDim):
+        normfeat[i] = (feature_vector[i]-fmn[i])/fsd[i]
+    normFeatures.append(normfeat)
+    #transpose result
+    res = np.array(normFeatures).T
+    return res
+
+# normalize features
+from operator import itemgetter
+numDim = len(Features_train[0])
+scalefeat = [None]*numDim
+fmean = np.mean(np.asarray(Features_train),axis=0)
+fstd = np.std(np.asarray(Features_train),axis=0)
+
+# assemble data for plotting
+f0 = [] # no-sign
+f1 = [] # stop sign
+f2 = [] # warning sign
+fvec=[]
+for ff,y in zip(Features_train,y_train):
     if y==0:
-        f0.append(features)
+        ffnorm = normalize_features(ff,fmean,fstd)
+        fvec.append(ffnorm)
+        f0.append(ffnorm)
     elif y==1:
-        f1.append(features)
+        ffnorm = normalize_features(ff,fmean,fstd)
+        fvec.append(ffnorm)
+        f1.append(ffnorm)
     else:
-        f2.append(features)
+        ffnorm = normalize_features(ff,fmean,fstd)
+        fvec.append(ffnorm)
+        f2.append(ffnorm)
+
+normFeatures = np.squeeze(fvec)
+print('Feature extraction done.')
+# ------------------------------------------------------------------ #
 
 clf = svm.SVC() #(kernel='rbf')
-clf.fit(Features_train,y_train)
+clf.fit(normFeatures,y_train)
 
-with open('model_svm.p', 'wb') as handle:
-    pickle.dump(clf, handle, protocol=2)
-
+svmdata = {
+    #"clf": clf,
+    "fmean" : fmean,
+    "fstd" : fstd
+#    "scalefeat" : scalefeat
+}
+pickle.dump(clf, open('model_svm.p', 'wb'))
+pickle.dump(svmdata, open('svm_params.p', 'wb'))
+# with open('model_svm.p', 'wb') as handle:
+#     pickle.dump(svmdata, handle, protocol=2)
+pickle.dump(X_test, open('Xtest.p', 'wb'))
+pickle.dump(y_test, open('ytest.p', 'wb'))
 print('SVM training done.')
 
-# visualize
+#######################################################
+# visualize (first two dimensions/features only)
 visualize = True
 if visualize:
-    plt.scatter(np.asarray(f0)[:,0], np.asarray(f0)[:,1], color='g', marker='o')
-    plt.scatter(np.asarray(f1)[:,0], np.asarray(f1)[:,1], color='r', marker='*')
-    plt.scatter(np.asarray(f2)[:,0], np.asarray(f2)[:,1], color='b', marker='^')
+    fig, ax = plt.subplots()
+    ax.scatter(np.asarray(f0)[:,0], np.asarray(f0)[:,1], color='g', marker='o', label='no sign')
+    ax.scatter(np.asarray(f1)[:,0], np.asarray(f1)[:,1], color='r', marker='*', label='stop')
+    ax.scatter(np.asarray(f2)[:,0], np.asarray(f2)[:,1], color='b', marker='^', label='warn')
+    # ax.scatter(np.asarray(plotf0)[:,0], np.asarray(plotf0)[:,1], color='g', marker='o', label='no sign')
+    # ax.scatter(np.asarray(plotf1)[:,0], np.asarray(plotf1)[:,1], color='r', marker='*', label='stop')
+    # ax.scatter(np.asarray(plotf2)[:,0], np.asarray(plotf2)[:,1], color='b', marker='^', label='warn')
+    ax.legend()
+    ax.grid(True)
     plt.show()
+
+#######################################################
+del clf
+del fmean
+del fstd
+print 'SVM model and params deleted'
+
+clf = pickle.load(open('model_svm.p', 'rb'))
+svmparams = pickle.load(open('svm_params.p', 'rb')) #pickle.load(f2)
+fmean = svmparams['fmean']
+fstd = svmparams['fstd']
+print 'SVM model reloaded'
 
 # test
 right=0
 wrong=0
 for x,y in zip(X_test,y_test):
-    features = [num_edges(x),num_red_pixels(x)]#,num_white_pixels(x)]
-    testvec = np.asarray(features).reshape(1,-1)
+    feat = getFeatures(x)
+    normfeat = normalize_features(feat,fmean,fstd)
+    testvec = np.asarray(normfeat).reshape(1,-1)
+
     clf.predict(testvec)
     res = clf.predict(testvec)
     if res[0]==y:
         right = right + 1
     else:
         wrong = wrong + 1
-        print str(res[0]) + " <- " + str(y)
+        #print str(res[0]) + " <- " + str(y)
+
+print 'Test results:'
 print 'right = ' + str(right) + ' wrong = ' + str(wrong)
 print 'accuracy = ' + str(100.*right/(right+wrong)) + ' %'
