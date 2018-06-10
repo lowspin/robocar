@@ -6,7 +6,7 @@
 Use command `ffmpeg -i output.avi -f image2 output=%04d.png` to split video (output.avi) into image frames
 
 ### 2. Extract 50x50 cropped windows
-Create output folder to store 50x50 images, e.g. `mkdir img50x50`
+Create output folder to store 50x50 pixels training images, e.g. `mkdir img50x50`
 Edit lines 9 and 10 of `extract50x50.py` to specify input and output paths
 Run `extract50x50.py` to extract 50x50 pixel images that has at least [min_red_pixels] red pixels (Note: change this threshold at line 24)
 
