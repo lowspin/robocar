@@ -81,14 +81,30 @@ class CamNode(object):
 
         while not rospy.is_shutdown():
             self.camera.capture(imgcapture, 'bgr', use_video_port=True, resize=(IMG_WIDTH, IMG_HEIGHT))
+            img = imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3)
+
+            # Check drive state - stop or go
+            drive_state = self.drive_state(img)
 
             # process frame
-            self.twist_from_frame(imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3), dt)
+            if (drive_state == 0):
+                self.twist_from_frame(img, dt)
+            else:
+                vel = Twist()
+                vel.linear.x = 0.
+                vel.angular.z = 0.
+                self.my_twist_command = vel
 
             # publish drive command
             self.pub.publish(self.my_twist_command)
 
             rate.sleep()
+
+    def drive_state(self, image):
+        # 0 - normal (go)
+        # 1 - stop
+        # 2 - warning sign
+        return 0
 
     def twist_from_frame(self, image, dt):
 
