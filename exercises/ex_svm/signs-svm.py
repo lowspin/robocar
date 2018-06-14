@@ -156,13 +156,13 @@ pickle.dump(clf, open('model_svm.p', 'wb'))
 pickle.dump(svmdata, open('svm_params.p', 'wb'))
 # with open('model_svm.p', 'wb') as handle:
 #     pickle.dump(svmdata, handle, protocol=2)
-pickle.dump(X_test, open('Xtest.p', 'wb'))
-pickle.dump(y_test, open('ytest.p', 'wb'))
+#pickle.dump(X_test, open('Xtest.p', 'wb'))
+#pickle.dump(y_test, open('ytest.p', 'wb'))
 print('SVM training done.')
 
 #######################################################
 # visualize (first two dimensions/features only)
-visualize = True
+visualize = False
 if visualize:
     fig, ax = plt.subplots()
     ax.scatter(np.asarray(f0)[:,0], np.asarray(f0)[:,1], color='g', marker='o', label='no sign')

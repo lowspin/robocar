@@ -12,6 +12,7 @@ from geometry_msgs.msg import Twist, TwistStamped
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from pid import PID
+from clf_svm import SVMCLF
 
 # Tuning Params 
 IMG_WIDTH = 128
@@ -68,8 +69,11 @@ class CamNode(object):
         rospy.init_node('cam_control_node')
         self.pub = rospy.Publisher('driver_node/cmd_vel', Twist, queue_size=1)
 
-        self.image_pub = rospy.Publisher('camera/image', Image)
+        self.image_pub = rospy.Publisher('camera/image', Image, queue_size=1)
         self.bridge = CvBridge()
+
+        # classifier
+        self.clf_svm = SVMCLF(rospy.get_param('~svmModelFile'),rospy.get_param('~svmParamsFile'),nhistory=1)
 
         self.loop()
 
@@ -84,7 +88,8 @@ class CamNode(object):
             img = imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3)
 
             # Check drive state - stop or go
-            drive_state = self.drive_state(img)
+            #drive_state, dec_img = self.drive_state(img) 
+            drive_state, dec_img = self.clf_svm.processOneFrame(img)
 
             # process frame
             if (drive_state == 0):
@@ -104,7 +109,7 @@ class CamNode(object):
         # 0 - normal (go)
         # 1 - stop
         # 2 - warning sign
-        return 0
+        return 0, image
 
     def twist_from_frame(self, image, dt):
 
