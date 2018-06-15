@@ -2,6 +2,10 @@
     <!-- camera controller node -->
     <include file="$(find camcontrol)/launch/cameracontrol.launch"/>
 
+    <!-- classifier node -->
+    <include file="$(find classifier)/launch/classifiersvm.launch"/>
+    <!--include file="$(find classifier)/launch/classfiertf.launch"/-->
+
     <!-- Motor driver node -->
     <include file="$(find drivemotor)/launch/motors.launch"/>
 </launch>

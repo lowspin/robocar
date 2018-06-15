@@ -1,3 +1,9 @@
+#!/usr/bin/python
+import rospy
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge, CvBridgeError
+from std_msgs.msg import Int8
+
 import numpy as np
 import cv2
 from sklearn import svm
@@ -13,14 +19,42 @@ imgsize = (128,96)
 windowsize = (50,50)
 slidestep = (5,5) # number of pixels to slide window
 min_red_pixels = 20 # min red pixel to process window
+nhistory=1 # tracker buffer
 
-class SVMCLF(object):
-    def __init__(self, fn_model, fn_params, nhistory=1):
+class SVMCLF():
+    def __init__(self):
+        rospy.init_node('classifier', anonymous=True)
+        fn_model = rospy.get_param('~svmModelFile')
+        fn_params = rospy.get_param('~svmParamsFile')
         self.clf = pickle.load(open(fn_model, 'rb'))
         svmparams = pickle.load(open(fn_params, 'rb')) #pickle.load(f2)
         self.fmean = svmparams['fmean']
         self.fstd = svmparams['fstd']
         self.tracker = Tracker(nhistory)
+        rospy.Subscriber("camera/image", Image, self.callback, queue_size=1)
+        self.bridge = CvBridge()
+        self.pub = rospy.Publisher('driver_node/drivestate', Int8, queue_size=1)
+
+        self.drive_state = 0
+
+        self.imgsvm_pub = rospy.Publisher('camera/imgsvm', Image, queue_size=1)
+
+        self.loop()
+
+    def callback(self,rosimg):
+        print 'callback'
+        # ---- process frame here ---
+        dec,draw_img = self.processOneFrame(self.bridge.imgmsg_to_cv2(rosimg))
+        print dec
+        self.imgsvm_pub.publish(self.bridge.cv2_to_imgmsg(draw_img, "bgr8"))
+        self.drive_state = dec
+        self.pub.publish(self.drive_state)
+
+    def loop(self):
+        dt = 0.2
+        rate = rospy.Rate(1/dt)
+        while not rospy.is_shutdown():
+            rate.sleep()
 
     def getFeatures(self,img):
         return [
@@ -93,8 +127,8 @@ class SVMCLF(object):
         return img
 
     def find_signs(self,img):
-        startx = 0 #60
-        stopx = imgsize[0]-windowsize[0] #80
+        startx = 30
+        stopx = 50 #imgsize[0]-windowsize[0] #80
         starty = 0 #20 #19
         stopy =imgsize[1]-windowsize[1] #30
 
@@ -178,3 +212,6 @@ class SVMCLF(object):
             else:
                 draw_img = img
         return final_decision, draw_img
+
+if __name__ == '__main__':
+    SVMCLF()

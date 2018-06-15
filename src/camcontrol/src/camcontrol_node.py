@@ -12,7 +12,7 @@ from geometry_msgs.msg import Twist, TwistStamped
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from pid import PID
-from clf_svm import SVMCLF
+from std_msgs.msg import Int8
 
 # Tuning Params 
 IMG_WIDTH = 128
@@ -72,10 +72,14 @@ class CamNode(object):
         self.image_pub = rospy.Publisher('camera/image', Image, queue_size=1)
         self.bridge = CvBridge()
 
-        # classifier
-        self.clf_svm = SVMCLF(rospy.get_param('~svmModelFile'),rospy.get_param('~svmParamsFile'),nhistory=1)
+        # drive state: stop or go
+        self.drive_state = 0
+        rospy.Subscriber("driver_node/drivestate", Int8, self.updateDriveState_cb)
 
         self.loop()
+    
+    def updateDriveState_cb(self,state):
+        self.drive_state = state.data
 
     def loop(self): 
         dt = CAMNODE_DT
@@ -88,31 +92,21 @@ class CamNode(object):
             img = imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3)
 
             # Check drive state - stop or go
-            #drive_state, dec_img = self.drive_state(img) 
-            drive_state, dec_img = self.clf_svm.processOneFrame(img)
-
-            # process frame
-            if (drive_state == 0):
+            if (self.drive_state != 1):
                 self.twist_from_frame(img, dt)
             else:
                 vel = Twist()
                 vel.linear.x = 0.
                 vel.angular.z = 0.
                 self.my_twist_command = vel
+                print "========= STOP =========="
 
             # publish drive command
             self.pub.publish(self.my_twist_command)
 
             rate.sleep()
 
-    def drive_state(self, image):
-        # 0 - normal (go)
-        # 1 - stop
-        # 2 - warning sign
-        return 0, image
-
     def twist_from_frame(self, image, dt):
-
         # prepare image
         img_warped = imagefunctions.warp(image)
         hsv = cv2.cvtColor(img_warped, cv2.COLOR_BGR2HSV)
@@ -171,7 +165,7 @@ class CamNode(object):
             vel = Twist()
             vel.linear.x = min(self.max_linear_vel, throttle)
             vel.angular.z = steering
-            print 'dist=' + str(dist_to_line) + " ang=" + str(ang_deviation) + " => throttle=" + str(vel.linear.x) + ", steer=" + str(vel.angular.z)
+            print 'dist=' + str(dist_to_line) + " ang=" + str(ang_deviation) + " => throttle=" + str(vel.linear.x) + ", steer=" + str(vel.angular.z) + ", state=" + str(self.drive_state)
 
             # update Twist Command
             self.my_twist_command = vel
