@@ -6,17 +6,26 @@ import json
 import glob
 
 
-RES_X = 1024
-RES_Y = 768
 
-pygame.init()
-display = pygame.display.set_mode((RES_X, RES_Y))
-# screen = pygame.surface.Surface((RES_X, RES_Y), 0, display)
 
 image_paths = glob.glob('./frames/*.png')
 image_paths.sort()
 print('Found %d frames to label.' % len(image_paths))
-dt = 1./30
+
+# Check resolution.
+TRUE_X = 128
+TRUE_Y = 96
+test_image = scipy.ndimage.imread(image_paths[0])
+assert test_image.shape[0] == TRUE_Y, test_image.shape
+assert test_image.shape[1] >= TRUE_X, test_image.shape
+
+RES_SCALE = 8
+RES_X = int(TRUE_X * RES_SCALE)
+RES_Y = int(TRUE_Y * RES_SCALE)
+assert float(TRUE_X) / TRUE_Y == float(RES_X) / RES_Y
+
+pygame.init()
+display = pygame.display.set_mode((RES_X, RES_Y))
 
 
 class ImageGrabber:
@@ -104,10 +113,13 @@ while running:
 					cl = class_number is None
 					if (cp and cl) or (not cp and not cl):
 
+						if not cp:
+							center_point = tuple(float(z) / RES_SCALE for z in center_point)
+
 						# Save the labeling.
 						data[image_path] = (
 							center_point, 
-							diameter if center_point is not None else None, 
+							diameter / RES_SCALE if center_point is not None else None, 
 							class_number, 
 						)
 
@@ -163,6 +175,5 @@ j = json.dumps(data)
 with open(datafile_name, 'w') as f:
 	f.write(j)
 print 'Saved to %s.' % datafile_name
-
 
 pygame.quit()
