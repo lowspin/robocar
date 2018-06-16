@@ -188,21 +188,14 @@ fstd = svmparams['fstd']
 print 'SVM model reloaded'
 
 # test
-right=0
-wrong=0
-for x,y in zip(X_test,y_test):
+fvec=[]
+for x in X_test:
     feat = getFeatures(x)
     normfeat = normalize_features(feat,fmean,fstd)
-    testvec = np.asarray(normfeat).reshape(1,-1)
-
-    clf.predict(testvec)
-    res = clf.predict(testvec)
-    if res[0]==y:
-        right = right + 1
-    else:
-        wrong = wrong + 1
-        #print str(res[0]) + " <- " + str(y)
-
+    testvec = np.asarray(normfeat).reshape(-1,1)
+    fvec.append(testvec)
+rvec = clf.predict(np.array(fvec).squeeze())
+res = [a==b for (a,b) in zip(y_test,rvec)]
 print 'Test results:'
-print 'right = ' + str(right) + ' wrong = ' + str(wrong)
-print 'accuracy = ' + str(100.*right/(right+wrong)) + ' %'
+print 'right = ' + str(sum(res)) + ' wrong = ' + str(len(y_test)-sum(res))
+print 'accuracy = ' + str(100.*sum(res)/(len(y_test))) + ' %'
