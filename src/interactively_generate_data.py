@@ -2,7 +2,6 @@ import pygame
 import numpy as np
 import scipy, scipy.ndimage
 import time
-import matplotlib.pyplot as plt
 import json
 import glob
 
