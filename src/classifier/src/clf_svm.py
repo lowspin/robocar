@@ -2,7 +2,7 @@
 import rospy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
-from std_msgs.msg import Int8
+from std_msgs.msg import Int8, Time
 
 import numpy as np
 import cv2
@@ -12,6 +12,7 @@ import imagefunctions
 from tracker import Tracker
 import pickle
 #import random
+import time
 
 ###########################################################3
 # sliding window parameters
@@ -31,27 +32,33 @@ class SVMCLF():
         self.fmean = svmparams['fmean']
         self.fstd = svmparams['fstd']
         self.tracker = Tracker(nhistory)
+        rospy.Subscriber("driver_node/time", Time, self.time_callback, queue_size=1)
         rospy.Subscriber("camera/image", Image, self.callback, queue_size=1)
-        self.bridge = CvBridge()
+#        self.bridge = CvBridge()
         self.pub = rospy.Publisher('driver_node/drivestate', Int8, queue_size=1)
 
         self.drive_state = 0
 
-        self.imgsvm_pub = rospy.Publisher('camera/imgsvm', Image, queue_size=1)
+#        self.imgsvm_pub = rospy.Publisher('camera/imgsvm', Image, queue_size=1)
 
         self.loop()
 
+    def time_callback(self,rostime):
+        print "Data freshness: " + str(time.time() - rostime.data.secs)
+		
     def callback(self,rosimg):
-        print 'callback'
+        print 'callback ' + str(rospy.get_rostime().secs - rosimg.header.stamp.secs)
+        start_time = time.time()
         # ---- process frame here ---
-        dec,draw_img = self.processOneFrame(self.bridge.imgmsg_to_cv2(rosimg))
-        print dec
-        self.imgsvm_pub.publish(self.bridge.cv2_to_imgmsg(draw_img, "bgr8"))
+        #dec,draw_img = self.processOneFrame(self.bridge.imgmsg_to_cv2(rosimg))
+        dec,draw_img = self.processOneFrame(CvBridge().imgmsg_to_cv2(rosimg))
+        print str(dec) + " (" + str(time.time() - start_time) + " sec)"
+ #       self.imgsvm_pub.publish(self.bridge.cv2_to_imgmsg(draw_img, "bgr8"))
         self.drive_state = dec
         self.pub.publish(self.drive_state)
 
     def loop(self):
-        dt = 0.2
+        dt = 0.1
         rate = rospy.Rate(1/dt)
         while not rospy.is_shutdown():
             rate.sleep()
@@ -79,36 +86,32 @@ class SVMCLF():
         return res
 
     def search_windows(self,img, windows,framenum = 0):
-        stop_windows=[] # list of positive stop sign detection windows
-        warn_windows=[] # list of positive warn sign detection windows
-
-        cropnum = 0
+        # preprocess frame
+        img_prep = imagefunctions.preprocess_one_rgb(img[0:127][:])
+        fvec=[]
         for window in windows:
-            # extract test window from orginal image
-            #test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (50,50))
-            img_crop = img[window[0][1]:window[1][1], window[0][0]:window[1][0]]
-            #img_crop_pp = imagefunctions.preprocess_one_rgb(img_crop)
-            test_img = imagefunctions.preprocess_one_rgb(img_crop)
-            #test_img = np.array(255*img_crop_pp, dtype=np.uint8)
-
-            #fname = 'crop-'+ str(framenum)+'-'+str(cropnum)+'.png'
-            #imsave('img50x50/'+fname, test_img)
-            cropnum = cropnum + 1
+            # extract test window from image
+            test_img = img_prep[window[0][1]:window[1][1], window[0][0]:window[1][0]]
             # extract features
             feat = self.getFeatures(test_img)
             # normalize features
             normfeat = self.normalize_features(feat,self.fmean,self.fstd)
-            # predict using classifier
+            # assemble batch
             testvec = np.asarray(normfeat).reshape(1,-1)
-            prediction = self.clf.predict(testvec)
-            #print prediction
-            # save positive detection windows
-            if prediction == 2:
-                #print 'warning sign'
-                warn_windows.append(window)
-            elif prediction == 1:
-                stop_windows.append(window)
+            fvec.append(testvec)
 
+        # batch prediction
+        rvec = self.clf.predict(np.array(fvec).squeeze())
+
+        # list of positive stop sign detection windows
+        stop_indices = [i for i, x in enumerate(rvec) if x==1]
+        stop_windows = [windows[i] for i in stop_indices]
+
+        # list of positive warn sign detection windows
+        warn_indices = [i for i, x in enumerate(rvec) if x==2]
+        warn_windows = [windows[i] for i in warn_indices]
+
+        print str(len(stop_windows)) + ", " + str(len(warn_windows))
         # return positve detection windows
         return stop_windows, warn_windows
 
@@ -129,21 +132,27 @@ class SVMCLF():
     def find_signs(self,img):
         startx = 30
         stopx = 50 #imgsize[0]-windowsize[0] #80
-        starty = 0 #20 #19
-        stopy =imgsize[1]-windowsize[1] #30
+        starty = 10 #20 #19
+        stopy = 36 #imgsize[1]-windowsize[1] #30
 
         window_list = []
         for x in range(startx, stopx, slidestep[0]):
             for y in range(starty, stopy, slidestep[1]):
-                img_crop = img[ y:y+windowsize[1], x:x+windowsize[0]]
-                img_crop_pp = imagefunctions.preprocess_one_rgb(img_crop)
-                img_in = np.array(255*img_crop_pp, dtype=np.uint8)
+                img_in = img[ y:y+windowsize[1], x:x+windowsize[0]]
+                #img_crop_pp = imagefunctions.preprocess_one_rgb(img_crop)
+                #img_in = np.array(255*img_crop_pp, dtype=np.uint8)
                 if (imagefunctions.num_red_pixels(img_in)>min_red_pixels):
                     window_list.append(((x, y), (x+windowsize[0], y+windowsize[1])))
 
         #stop_windows, warn_windows = self.search_windows(img, window_list, framenum=random.randint(0,9999))
         stop_windows, warn_windows = self.search_windows(img, window_list)
 
+        if ((len(stop_windows)<2) and (len(warn_windows)<2)):
+            return 0,[None]
+        elif (len(stop_windows)>=len(warn_windows)):
+            return 1,[None]
+        else:
+            return 2,[None]
         # heatmap
         heat_stop = np.zeros_like(img[:,:,0]).astype(np.float)
         heat_warn = np.zeros_like(img[:,:,0]).astype(np.float)
@@ -152,27 +161,27 @@ class SVMCLF():
             starty = bbox[0][1]
             endx = bbox[1][0]
             endy = bbox[1][1]
-            #cv2.rectangle(img,(startx, starty),(endx, endy),(0,0,200),1)
+            cv2.rectangle(img,(startx, starty),(endx, endy),(0,0,200),1)
         for bbox in warn_windows:
             startx = bbox[0][0]
             starty = bbox[0][1]
             endx = bbox[1][0]
             endy = bbox[1][1]
             heat_warn[starty:endy, startx:endx] += 1.
-            #cv2.rectangle(img,(startx, starty),(endx, endy),(0,255,0),1)
+            cv2.rectangle(img,(startx, starty),(endx, endy),(0,255,0),1)
         for bbox in stop_windows:
             startx = bbox[0][0]
             starty = bbox[0][1]
             endx = bbox[1][0]
             endy = bbox[1][1]
             heat_stop[starty:endy, startx:endx] += 1.
-            #cv2.rectangle(img,(startx, starty),(endx, endy),(255,0,0),1)
+            cv2.rectangle(img,(startx, starty),(endx, endy),(255,0,0),1)
 
         score_stop = np.max(heat_stop)
         score_warn = np.max(heat_warn)
         #print '[scores] stop:' + str(score_stop) + ' warn:' + str(score_warn)
 
-        detthresh = 20
+        detthresh = 4
         mapthresh = 10
         labels=[None]
         if score_stop<detthresh and score_warn<detthresh:

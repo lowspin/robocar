@@ -12,7 +12,7 @@ from geometry_msgs.msg import Twist, TwistStamped
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from pid import PID
-from std_msgs.msg import Int8
+from std_msgs.msg import Int8, Time
 
 # Tuning Params 
 IMG_WIDTH = 128
@@ -68,6 +68,7 @@ class CamNode(object):
         # spin up ros
         rospy.init_node('cam_control_node')
         self.pub = rospy.Publisher('driver_node/cmd_vel', Twist, queue_size=1)
+        self.pub_time = rospy.Publisher('driver_node/time', Time, queue_size=1)
 
         self.image_pub = rospy.Publisher('camera/image', Image, queue_size=1)
         self.bridge = CvBridge()
@@ -88,6 +89,7 @@ class CamNode(object):
         imgcapture = np.zeros((IMG_WIDTH*IMG_HEIGHT*3,), dtype=np.uint8)
 
         while not rospy.is_shutdown():
+			
             self.camera.capture(imgcapture, 'bgr', use_video_port=True, resize=(IMG_WIDTH, IMG_HEIGHT))
             img = imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3)
 
@@ -100,6 +102,9 @@ class CamNode(object):
                 vel.angular.z = 0.
                 self.my_twist_command = vel
                 print "========= STOP =========="
+
+            # publish current time
+            self.pub_time.publish(rospy.get_rostime())
 
             # publish drive command
             self.pub.publish(self.my_twist_command)
@@ -146,7 +151,9 @@ class CamNode(object):
 
             # publish robot's view
             try:
-                self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_tile, "bgr8"))
+                imgmsg = self.bridge.cv2_to_imgmsg(out_tile, "bgr8")
+                imgmsg.header.stamp = rospy.get_rostime()
+                self.image_pub.publish(imgmsg)
             except CvBridgeError as e:
                 print(e)
 
@@ -180,7 +187,9 @@ class CamNode(object):
 
             # publish robot's view
             try:
-                self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_tile, "bgr8"))
+                imgmsg = self.bridge.cv2_to_imgmsg(out_tile, "bgr8")
+                imgmsg.header.stamp = rospy.get_rostime()
+                self.image_pub.publish(imgmsg)
             except CvBridgeError as e:
                 print(e)
 
