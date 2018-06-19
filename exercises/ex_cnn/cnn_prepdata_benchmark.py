@@ -2,9 +2,9 @@ import numpy as np
 import pickle
 from PIL import Image
 import glob
-import cv2
-from scipy.misc import imsave
-import ImageFunctions as imagefunctions
+##import cv2
+##from scipy.misc import imsave
+##import ImageFunctions as imagefunctions
 
 import sys
 
@@ -90,7 +90,6 @@ PICKLE_PATH = 'benchmark_data.p'
 ##### CNN ######
 
 import tensorflow.contrib.keras as keras
-from sklearn.model_selection import train_test_split
 
 def to_one_hot(labels):
     one_hot = np.zeros((labels.size, labels.max()+1))
@@ -107,12 +106,38 @@ X_test = np.array(X_test)
 y_test = np.array(y_test)
 y_test = to_one_hot(y_test)
 
-model = keras.models.load_model(MODEL_PATH)
+def build_model():
+    model = keras.models.Sequential()
+
+    model.add(keras.layers.Convolution2D(32, (3, 3), 3, activation='relu', 
+										 input_shape=(50,50,3)))
+    model.add(keras.layers.Convolution2D(32, (3, 3), 3, activation='relu',))
+    model.add(keras.layers.MaxPooling2D(pool_size=(2,2)))
+    model.add(keras.layers.Dropout(0.25))
+
+    model.add(keras.layers.Flatten())
+    model.add(keras.layers.Dense(128, activation='relu'))
+    model.add(keras.layers.Dense(128, activation='relu'))
+    model.add(keras.layers.Dropout(0.5))
+    model.add(keras.layers.Dense(3, activation='softmax'))
+
+##    opt = keras.optimizers.RMSprop(lr=0.001, decay=1e-6)
+
+    # AdamOp = keras.optimizers.Adam(lr=0.01, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+
+    model.compile(loss='categorical_crossentropy',
+    			  optimizer=keras.optimizers.Optimizer(),
+    			  metrics=['accuracy'])
+    return model
+
+
+model = build_model()
 
 
 ##### BENCHMARK MODEL
 
-
+X_test = X_test.astype(np.int32)
+print X_test.dtype
 import time
 
 num_trials = 20
