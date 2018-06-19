@@ -6,15 +6,15 @@ from picamera import PiCamera
 import time
 import cv2
 import numpy as np
-import imagefunctions 
+import imagefunctions
 import rospy
 from geometry_msgs.msg import Twist, TwistStamped
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from pid import PID
-from std_msgs.msg import Int8, Time
+from std_msgs.msg import Int8
 
-# Tuning Params 
+# Tuning Params
 IMG_WIDTH = 128
 IMG_HEIGHT = 96
 
@@ -33,7 +33,7 @@ FRAMERATE = 50
 
 # Main Camera Node Class
 class CamNode(object):
-    
+
     def __init__(self):
 
         # initialize controller
@@ -78,18 +78,18 @@ class CamNode(object):
         rospy.Subscriber("driver_node/drivestate", Int8, self.updateDriveState_cb)
 
         self.loop()
-    
+
     def updateDriveState_cb(self,state):
         self.drive_state = state.data
 
-    def loop(self): 
+    def loop(self):
         dt = CAMNODE_DT
         rate = rospy.Rate(1/dt)
 
         imgcapture = np.zeros((IMG_WIDTH*IMG_HEIGHT*3,), dtype=np.uint8)
 
         while not rospy.is_shutdown():
-			
+
             self.camera.capture(imgcapture, 'bgr', use_video_port=True, resize=(IMG_WIDTH, IMG_HEIGHT))
             img = imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3)
 
@@ -101,13 +101,16 @@ class CamNode(object):
                 vel.linear.x = 0.
                 vel.angular.z = 0.
                 self.my_twist_command = vel
-                print "========= STOP =========="
-
-            # publish current time
-            self.pub_time.publish(rospy.get_rostime())
 
             # publish drive command
             self.pub.publish(self.my_twist_command)
+
+            # shutdown if STOP sign detected
+            if (self.drive_state == 1):
+                print "========= STOP =========="
+                rospy.signal_shutdown(reason)
+            elif (self.drive_state != 1):
+                print "^^^^^^^^^ WARN ^^^^^^^^^^"
 
             rate.sleep()
 
@@ -116,7 +119,7 @@ class CamNode(object):
         img_warped = imagefunctions.warp(image)
         hsv = cv2.cvtColor(img_warped, cv2.COLOR_BGR2HSV)
         ret, img_bin = cv2.threshold(hsv[:, :, 1], 100, 255, cv2.THRESH_BINARY)
-        
+
         # pick points for interpolation
         #pts_x, pts_y = imagefunctions.pickpoints(img_bin)
         pts_x, pts_y = imagefunctions.pickpoints2(img_bin, self.minx-10,self.miny-10,self.maxx+10,self.maxy+10)
@@ -162,7 +165,7 @@ class CamNode(object):
             slope = z[0] # np.arctan2
             ang_deviation = -slope # +ve: line deviates to right of car
 
-            cte = wt_dist*dist_to_line + wt_ang*ang_deviation 
+            cte = wt_dist*dist_to_line + wt_ang*ang_deviation
 
             # Controllers
             throttle = MAX_THROTTLE_GAIN
@@ -176,7 +179,7 @@ class CamNode(object):
 
             # update Twist Command
             self.my_twist_command = vel
-	
+
         else:
             # publish robot's view
             # plot line on image

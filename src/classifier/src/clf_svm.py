@@ -20,48 +20,63 @@ imgsize = (128,96)
 windowsize = (50,50)
 slidestep = (5,5) # number of pixels to slide window
 min_red_pixels = 20 # min red pixel to process window
-nhistory=1 # tracker buffer
 
 class SVMCLF():
     def __init__(self):
+
+        # ROS nodes
         rospy.init_node('classifier', anonymous=True)
+        rospy.Subscriber("camera/image", Image, self.callback, queue_size=1)
+        self.pub = rospy.Publisher('driver_node/drivestate', Int8, queue_size=1)
+        self.imgsvm_pub = rospy.Publisher('camera/imgsvm', Image, queue_size=1)
+
+        # Trained SVM model
         fn_model = rospy.get_param('~svmModelFile')
         fn_params = rospy.get_param('~svmParamsFile')
         self.clf = pickle.load(open(fn_model, 'rb'))
         svmparams = pickle.load(open(fn_params, 'rb')) #pickle.load(f2)
         self.fmean = svmparams['fmean']
         self.fstd = svmparams['fstd']
-        self.tracker = Tracker(nhistory)
-        rospy.Subscriber("driver_node/time", Time, self.time_callback, queue_size=1)
-        rospy.Subscriber("camera/image", Image, self.callback, queue_size=1)
-#        self.bridge = CvBridge()
-        self.pub = rospy.Publisher('driver_node/drivestate', Int8, queue_size=1)
 
+        # Settings
+        self.nhistory = 1 # tracker buffer
+        self.dt = 0.1 # update interval
+        self.K_detthresh = 0.04 # detection threshold (factor of window count)
+        self.K_mapthresh = 0.08 # discard threshold (factor of window count)
+        self.K_stopbias = 0.4 # bias to favor STOP over WARN (factor of window count)
+
+        # Updates
         self.drive_state = 0
+        self.img = [None]
+        self.lastimgtime = -1
 
-#        self.imgsvm_pub = rospy.Publisher('camera/imgsvm', Image, queue_size=1)
+        # tracker
+        self.tracker = Tracker(self.nhistory)
 
+        # start
         self.loop()
 
-    def time_callback(self,rostime):
-        print "Data freshness: " + str(time.time() - rostime.data.secs)
-		
     def callback(self,rosimg):
-        print 'callback ' + str(rospy.get_rostime().secs - rosimg.header.stamp.secs)
-        start_time = time.time()
-        # ---- process frame here ---
-        #dec,draw_img = self.processOneFrame(self.bridge.imgmsg_to_cv2(rosimg))
-        dec,draw_img = self.processOneFrame(CvBridge().imgmsg_to_cv2(rosimg))
-        print str(dec) + " (" + str(time.time() - start_time) + " sec)"
- #       self.imgsvm_pub.publish(self.bridge.cv2_to_imgmsg(draw_img, "bgr8"))
-        self.drive_state = dec
-        self.pub.publish(self.drive_state)
+        self.img = CvBridge().imgmsg_to_cv2(rosimg)
+        self.lastimgtime = rosimg.header.stamp.secs
 
     def loop(self):
-        dt = 0.1
-        rate = rospy.Rate(1/dt)
+        rate = rospy.Rate(1/self.dt)
+        lastupdate = -1
         while not rospy.is_shutdown():
-            rate.sleep()
+            if (self.lastimgtime != lastupdate):
+                start_time = time.time()
+                # ---- process frame ---
+                dec,draw_img = self.processOneFrame(CvBridge().imgmsg_to_cv2(rosimg))
+                lastupdate = self.lastimgtime
+                # Publish results
+                print str(dec) + " (" + str(time.time() - start_time) + " sec)"
+                self.drive_state = dec
+                self.pub.publish(self.drive_state)
+                # Optional - Publish image for monitoring
+                self.imgsvm_pub.publish(self.bridge.cv2_to_imgmsg(draw_img, "bgr8"))
+
+        rate.sleep()
 
     def getFeatures(self,img):
         return [
@@ -84,6 +99,20 @@ class SVMCLF():
         #transpose result
         res = np.array(normFeatures).T
         return res
+
+    def draw_labeled_bboxes(self,img, labels, boxcolor):
+        # Iterate through all detected cars
+        for item_number in range(1, labels[1]+1):
+            # Find pixels with each item_number label value
+            nonzero = (labels[0] == item_number).nonzero()
+            # Identify x and y values of those pixels
+            nonzeroy = np.array(nonzero[0])
+            nonzerox = np.array(nonzero[1])
+            bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+            # Draw the box on the image
+            cv2.rectangle(img, bbox[0], bbox[1], boxcolor, 2)
+        # Return the image
+        return img
 
     def search_windows(self,img, windows,framenum = 0):
         # preprocess frame
@@ -115,20 +144,6 @@ class SVMCLF():
         # return positve detection windows
         return stop_windows, warn_windows
 
-    def draw_labeled_bboxes(self,img, labels, boxcolor):
-        # Iterate through all detected cars
-        for item_number in range(1, labels[1]+1):
-            # Find pixels with each item_number label value
-            nonzero = (labels[0] == item_number).nonzero()
-            # Identify x and y values of those pixels
-            nonzeroy = np.array(nonzero[0])
-            nonzerox = np.array(nonzero[1])
-            bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
-            # Draw the box on the image
-            cv2.rectangle(img, bbox[0], bbox[1], boxcolor, 2)
-        # Return the image
-        return img
-
     def find_signs(self,img):
         startx = 30
         stopx = 50 #imgsize[0]-windowsize[0] #80
@@ -147,13 +162,15 @@ class SVMCLF():
         #stop_windows, warn_windows = self.search_windows(img, window_list, framenum=random.randint(0,9999))
         stop_windows, warn_windows = self.search_windows(img, window_list)
 
-        if ((len(stop_windows)<2) and (len(warn_windows)<2)):
-            return 0,[None]
-        elif (len(stop_windows)>=len(warn_windows)):
-            return 1,[None]
-        else:
-            return 2,[None]
-        # heatmap
+        # Method 1 - Count windows
+#        if ((len(stop_windows)<2) and (len(warn_windows)<2)):
+#            return 0,[None]
+#        elif (len(stop_windows)>=len(warn_windows)):
+#            return 1,[None]
+#        else:
+#            return 2,[None]
+
+        # Method 2 - Localized heatmap based decision
         heat_stop = np.zeros_like(img[:,:,0]).astype(np.float)
         heat_warn = np.zeros_like(img[:,:,0]).astype(np.float)
         for bbox in window_list:
@@ -181,45 +198,39 @@ class SVMCLF():
         score_warn = np.max(heat_warn)
         #print '[scores] stop:' + str(score_stop) + ' warn:' + str(score_warn)
 
-        detthresh = 4
-        mapthresh = 10
+        # decision thresholds and biases
+        numwin = len(window_list)
+        detthresh = K_detthresh * numwin
+        mapthresh = K_mapthresh * numwin
+        stopbias = K_stopbias * numwin
+
         labels=[None]
         if score_stop<detthresh and score_warn<detthresh:
             #print 'NO SIGN'
             decision = 0
-            draw_img = img
-        elif score_stop>score_warn:
+        elif (score_stop>=1) and (score_stop + stopbias > score_warn):
             #print 'STOP'
             decision = 1
             heatmap_stop = heat_stop
             heatmap_stop[heatmap_stop <= mapthresh] = 0
             labels = label(heatmap_stop)
-            #draw_img = draw_labeled_bboxes(np.copy(img), labels_stop, boxcolor=(255,0,0))
         else:
             #print 'WARNING'
             decision = 2
-            # draw box
             heatmap_warn = heat_warn
             heatmap_warn[heatmap_warn <= mapthresh] = 0
             labels = label(heatmap_warn)
-            #draw_img = draw_labeled_bboxes(np.copy(img), labels_warn, boxcolor=(0,255,0))
 
         #Image.fromarray(draw_img).show()
-        return decision, labels #draw_img
+        return decision, labels, img
 
     def processOneFrame(self,img):
-        dec, labels = self.find_signs(img)
+        # get decision for current frame
+        dec, labels, draw_img = self.find_signs(img)
+        # combine with previous results (if applicable)
         self.tracker.new_data(dec)
         final_decision = self.tracker.combined_results()
-        #print dec, final_decision
-        draw_img = img
-        if len(labels)==2:
-            if final_decision==1:
-                draw_img = self.draw_labeled_bboxes(np.copy(img), labels, boxcolor=(255,0,0))
-            elif final_decision==2:
-                draw_img = self.draw_labeled_bboxes(np.copy(img), labels, boxcolor=(0,255,0))
-            else:
-                draw_img = img
+        # return results and output image
         return final_decision, draw_img
 
 if __name__ == '__main__':
