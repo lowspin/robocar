@@ -41,7 +41,8 @@ class SVMCLF():
         # Settings
         self.nhistory = 1 # tracker buffer
         self.dt = 0.1 # update interval
-        self.K_detthresh = 0.11 # detection threshold (factor of window count)
+        self.K_detthresh_stop = 0.05 # detection threshold (factor of window count)
+        self.K_detthresh_warn = 0.2 # detection threshold (factor of window count)
         self.K_mapthresh = 0.08 # discard threshold (factor of window count)
         self.K_stopbias = 0.4 # bias to favor STOP over WARN (factor of window count)
 
@@ -131,7 +132,10 @@ class SVMCLF():
             fvec.append(testvec)
 
         # batch prediction
-        rvec = self.clf.predict(np.array(fvec).squeeze())
+        if (np.array(fvec).ndim==3):
+            rvec = self.clf.predict(np.array(fvec).squeeze(axis=1))
+        else:
+            rvec = []
 
         # list of positive stop sign detection windows
         stop_indices = [i for i, x in enumerate(rvec) if x==1]
@@ -161,6 +165,13 @@ class SVMCLF():
 
         #stop_windows, warn_windows = self.search_windows(img, window_list, framenum=random.randint(0,9999))
         stop_windows, warn_windows = self.search_windows(img, window_list)
+
+        # if no window to search        
+        numwin = len(window_list)
+        if (numwin == 0):
+            decision = 0
+            labels = [None]
+            return decision, labels, img
 
         # Method 1 - Count windows
 #        if ((len(stop_windows)<2) and (len(warn_windows)<2)):
@@ -198,33 +209,39 @@ class SVMCLF():
         score_warn = np.max(heat_warn)
         print '[scores] stop:' + str(score_stop) + ' warn:' + str(score_warn)
 
-        # decision thresholds and biases
-        numwin = len(window_list)
-        detthresh = self.K_detthresh * numwin
+        # ---- GET DECISION ---- #
+        decision = self.get_decision(score_stop, score_warn, numwin)
+
+        # plot final decision region
         mapthresh = self.K_mapthresh * numwin
-        stopbias = self.K_stopbias * numwin
-        print 'numwin = ' + str(numwin) + ', detthresh = ' + str(detthresh)
         labels=[None]
-#        if score_stop<detthresh and score_warn<detthresh:
-#            #print 'NO SIGN'
-#            decision = 0
-        if (score_stop>=detthresh): # and (score_stop + stopbias > score_warn):
-            #print 'STOP'
-            decision = 1
+        if (decision == 1):
             heatmap_stop = heat_stop
             heatmap_stop[heatmap_stop <= mapthresh] = 0
             labels = label(heatmap_stop)
-        elif (score_warn>=detthresh):
-            #print 'WARNING'
-            decision = 2
+        elif (decision == 2):
             heatmap_warn = heat_warn
             heatmap_warn[heatmap_warn <= mapthresh] = 0
             labels = label(heatmap_warn)
+
+        return decision, labels, img
+
+    def get_decision(self, score_stop, score_warn, numwin):
+        # decision thresholds and biases
+        detthresh_stop = self.K_detthresh_stop * numwin
+        detthresh_warn = self.K_detthresh_warn * numwin
+        #stopbias = self.K_stopbias * numwin
+        print 'numwin = ' + str(numwin) + ', detthreshSTOP = ' + str(detthresh_stop) + ', detthreshWARN = ' + str(detthresh_warn)
+        
+        # Make Decision
+        if (score_stop>=detthresh_stop): # and (score_stop + stopbias > score_warn):
+            decision = 1
+        elif (score_warn>=detthresh_warn):
+            decision = 2
         else:
             decision = 0
 
-        #Image.fromarray(draw_img).show()
-        return decision, labels, img
+        return decision
 
     def processOneFrame(self,img):
         # get decision for current frame

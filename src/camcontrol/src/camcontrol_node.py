@@ -108,6 +108,7 @@ class CamNode(object):
             # shutdown if STOP sign detected
             if (self.drive_state == 1):
                 print "========= STOP =========="
+#                time.sleep(1.)
                 rospy.signal_shutdown("STOP sign detected")
             elif (self.drive_state == 2):
                 print "^^^^^^^^^ WARN ^^^^^^^^^^"
