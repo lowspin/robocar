@@ -68,7 +68,6 @@ class CamNode(object):
         # spin up ros
         rospy.init_node('cam_control_node')
         self.pub = rospy.Publisher('driver_node/cmd_vel', Twist, queue_size=1)
-        self.pub_time = rospy.Publisher('driver_node/time', Time, queue_size=1)
 
         self.image_pub = rospy.Publisher('camera/image', Image, queue_size=1)
         self.bridge = CvBridge()
@@ -93,10 +92,11 @@ class CamNode(object):
             self.camera.capture(imgcapture, 'bgr', use_video_port=True, resize=(IMG_WIDTH, IMG_HEIGHT))
             img = imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3)
 
+            # Get drive commands
+            self.twist_from_frame(img, dt)
+
             # Check drive state - stop or go
-            if (self.drive_state != 1):
-                self.twist_from_frame(img, dt)
-            else:
+            if (self.drive_state == 1):
                 vel = Twist()
                 vel.linear.x = 0.
                 vel.angular.z = 0.
@@ -108,8 +108,8 @@ class CamNode(object):
             # shutdown if STOP sign detected
             if (self.drive_state == 1):
                 print "========= STOP =========="
-                rospy.signal_shutdown(reason)
-            elif (self.drive_state != 1):
+                rospy.signal_shutdown("STOP sign detected")
+            elif (self.drive_state == 2):
                 print "^^^^^^^^^ WARN ^^^^^^^^^^"
 
             rate.sleep()

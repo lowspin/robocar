@@ -41,7 +41,7 @@ class SVMCLF():
         # Settings
         self.nhistory = 1 # tracker buffer
         self.dt = 0.1 # update interval
-        self.K_detthresh = 0.04 # detection threshold (factor of window count)
+        self.K_detthresh = 0.11 # detection threshold (factor of window count)
         self.K_mapthresh = 0.08 # discard threshold (factor of window count)
         self.K_stopbias = 0.4 # bias to favor STOP over WARN (factor of window count)
 
@@ -67,14 +67,15 @@ class SVMCLF():
             if (self.lastimgtime != lastupdate):
                 start_time = time.time()
                 # ---- process frame ---
-                dec,draw_img = self.processOneFrame(CvBridge().imgmsg_to_cv2(rosimg))
+                rosimg = self.img # copy to local memory before processing
+                dec,draw_img = self.processOneFrame(rosimg)
                 lastupdate = self.lastimgtime
                 # Publish results
-                print str(dec) + " (" + str(time.time() - start_time) + " sec)"
+                print "State=" + str(dec) + " (" + str(time.time() - start_time) + "s)"
                 self.drive_state = dec
                 self.pub.publish(self.drive_state)
                 # Optional - Publish image for monitoring
-                self.imgsvm_pub.publish(self.bridge.cv2_to_imgmsg(draw_img, "bgr8"))
+                self.imgsvm_pub.publish(CvBridge().cv2_to_imgmsg(draw_img, "bgr8"))
 
         rate.sleep()
 
@@ -140,15 +141,14 @@ class SVMCLF():
         warn_indices = [i for i, x in enumerate(rvec) if x==2]
         warn_windows = [windows[i] for i in warn_indices]
 
-        print str(len(stop_windows)) + ", " + str(len(warn_windows))
         # return positve detection windows
         return stop_windows, warn_windows
 
     def find_signs(self,img):
-        startx = 30
-        stopx = 50 #imgsize[0]-windowsize[0] #80
-        starty = 10 #20 #19
-        stopy = 36 #imgsize[1]-windowsize[1] #30
+        startx = 10
+        stopx = 68 #imgsize[0]-windowsize[0] #80
+        starty = 0 #20 #19
+        stopy = imgsize[1]-windowsize[1] #30
 
         window_list = []
         for x in range(startx, stopx, slidestep[0]):
@@ -178,7 +178,7 @@ class SVMCLF():
             starty = bbox[0][1]
             endx = bbox[1][0]
             endy = bbox[1][1]
-            cv2.rectangle(img,(startx, starty),(endx, endy),(0,0,200),1)
+            cv2.rectangle(img,(startx, starty),(endx, endy),(200,0,0),1)
         for bbox in warn_windows:
             startx = bbox[0][0]
             starty = bbox[0][1]
@@ -192,34 +192,36 @@ class SVMCLF():
             endx = bbox[1][0]
             endy = bbox[1][1]
             heat_stop[starty:endy, startx:endx] += 1.
-            cv2.rectangle(img,(startx, starty),(endx, endy),(255,0,0),1)
+            cv2.rectangle(img,(startx, starty),(endx, endy),(0,0,255),1)
 
         score_stop = np.max(heat_stop)
         score_warn = np.max(heat_warn)
-        #print '[scores] stop:' + str(score_stop) + ' warn:' + str(score_warn)
+        print '[scores] stop:' + str(score_stop) + ' warn:' + str(score_warn)
 
         # decision thresholds and biases
         numwin = len(window_list)
-        detthresh = K_detthresh * numwin
-        mapthresh = K_mapthresh * numwin
-        stopbias = K_stopbias * numwin
-
+        detthresh = self.K_detthresh * numwin
+        mapthresh = self.K_mapthresh * numwin
+        stopbias = self.K_stopbias * numwin
+        print 'numwin = ' + str(numwin) + ', detthresh = ' + str(detthresh)
         labels=[None]
-        if score_stop<detthresh and score_warn<detthresh:
-            #print 'NO SIGN'
-            decision = 0
-        elif (score_stop>=1) and (score_stop + stopbias > score_warn):
+#        if score_stop<detthresh and score_warn<detthresh:
+#            #print 'NO SIGN'
+#            decision = 0
+        if (score_stop>=detthresh): # and (score_stop + stopbias > score_warn):
             #print 'STOP'
             decision = 1
             heatmap_stop = heat_stop
             heatmap_stop[heatmap_stop <= mapthresh] = 0
             labels = label(heatmap_stop)
-        else:
+        elif (score_warn>=detthresh):
             #print 'WARNING'
             decision = 2
             heatmap_warn = heat_warn
             heatmap_warn[heatmap_warn <= mapthresh] = 0
             labels = label(heatmap_warn)
+        else:
+            decision = 0
 
         #Image.fromarray(draw_img).show()
         return decision, labels, img
