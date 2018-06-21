@@ -6,14 +6,15 @@ from picamera import PiCamera
 import time
 import cv2
 import numpy as np
-import imagefunctions 
+import imagefunctions
 import rospy
 from geometry_msgs.msg import Twist, TwistStamped
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from pid import PID
+from std_msgs.msg import Int8
 
-# Tuning Params 
+# Tuning Params
 IMG_WIDTH = 128
 IMG_HEIGHT = 96
 
@@ -32,7 +33,7 @@ FRAMERATE = 50
 
 # Main Camera Node Class
 class CamNode(object):
-    
+
     def __init__(self):
 
         # initialize controller
@@ -68,35 +69,68 @@ class CamNode(object):
         rospy.init_node('cam_control_node')
         self.pub = rospy.Publisher('driver_node/cmd_vel', Twist, queue_size=1)
 
-        self.image_pub = rospy.Publisher('camera/image', Image)
+        self.image_pub = rospy.Publisher('camera/image', Image, queue_size=1)
         self.bridge = CvBridge()
+
+        # drive state: stop or go
+        self.drive_state = 0
+        rospy.Subscriber("driver_node/drivestate", Int8, self.updateDriveState_cb)
 
         self.loop()
 
-    def loop(self): 
+    def updateDriveState_cb(self,state):
+        self.drive_state = state.data
+
+    def loop(self):
         dt = CAMNODE_DT
         rate = rospy.Rate(1/dt)
 
+        stopvel = Twist()
+        stopvel.linear.x = 0.
+        stopvel.angular.z = 0.
+
+        stoptime = -1
         imgcapture = np.zeros((IMG_WIDTH*IMG_HEIGHT*3,), dtype=np.uint8)
 
         while not rospy.is_shutdown():
+
             self.camera.capture(imgcapture, 'bgr', use_video_port=True, resize=(IMG_WIDTH, IMG_HEIGHT))
+            img = imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3)
 
-            # process frame
-            self.twist_from_frame(imgcapture.reshape(IMG_HEIGHT, IMG_WIDTH, 3), dt)
+            # Get drive commands
+            self.twist_from_frame(img, dt)
 
-            # publish drive command
-            self.pub.publish(self.my_twist_command)
+            # Check drive state - stop or go
+            if (self.drive_state == 1):
+                self.my_twist_command = stopvel
+
+            # shutdown if STOP sign detected
+            if (self.drive_state == 1):
+                print "========= STOP =========="
+                # publish drive command
+                self.pub.publish(self.my_twist_command)
+                rospy.signal_shutdown("STOP sign detected")
+            elif (self.drive_state == 2):
+                print "^^^^^^^^^ WARN ^^^^^^^^^^"
+                if (time.time()-stoptime>1.):
+                    # pause
+                    #self.pub.publish(stopvel)
+                    #time.sleep(1.)
+                    stoptime = time.time()
+                # resume - publish original drive command
+                self.pub.publish(self.my_twist_command)
+            else:
+                # publish drive command
+                self.pub.publish(self.my_twist_command)
 
             rate.sleep()
 
     def twist_from_frame(self, image, dt):
-
         # prepare image
         img_warped = imagefunctions.warp(image)
         hsv = cv2.cvtColor(img_warped, cv2.COLOR_BGR2HSV)
         ret, img_bin = cv2.threshold(hsv[:, :, 1], 100, 255, cv2.THRESH_BINARY)
-        
+
         # pick points for interpolation
         #pts_x, pts_y = imagefunctions.pickpoints(img_bin)
         pts_x, pts_y = imagefunctions.pickpoints2(img_bin, self.minx-10,self.miny-10,self.maxx+10,self.maxy+10)
@@ -131,7 +165,9 @@ class CamNode(object):
 
             # publish robot's view
             try:
-                self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_tile, "bgr8"))
+                imgmsg = self.bridge.cv2_to_imgmsg(out_tile, "bgr8")
+                imgmsg.header.stamp = rospy.get_rostime()
+                self.image_pub.publish(imgmsg)
             except CvBridgeError as e:
                 print(e)
 
@@ -140,7 +176,7 @@ class CamNode(object):
             slope = z[0] # np.arctan2
             ang_deviation = -slope # +ve: line deviates to right of car
 
-            cte = wt_dist*dist_to_line + wt_ang*ang_deviation 
+            cte = wt_dist*dist_to_line + wt_ang*ang_deviation
 
             # Controllers
             throttle = MAX_THROTTLE_GAIN
@@ -150,11 +186,11 @@ class CamNode(object):
             vel = Twist()
             vel.linear.x = min(self.max_linear_vel, throttle)
             vel.angular.z = steering
-            print 'dist=' + str(dist_to_line) + " ang=" + str(ang_deviation) + " => throttle=" + str(vel.linear.x) + ", steer=" + str(vel.angular.z)
+            print 'dist=' + str(dist_to_line) + " ang=" + str(ang_deviation) + " => throttle=" + str(vel.linear.x) + ", steer=" + str(vel.angular.z) + ", state=" + str(self.drive_state)
 
             # update Twist Command
             self.my_twist_command = vel
-	
+
         else:
             # publish robot's view
             # plot line on image
@@ -165,7 +201,9 @@ class CamNode(object):
 
             # publish robot's view
             try:
-                self.image_pub.publish(self.bridge.cv2_to_imgmsg(out_tile, "bgr8"))
+                imgmsg = self.bridge.cv2_to_imgmsg(out_tile, "bgr8")
+                imgmsg.header.stamp = rospy.get_rostime()
+                self.image_pub.publish(imgmsg)
             except CvBridgeError as e:
                 print(e)
 

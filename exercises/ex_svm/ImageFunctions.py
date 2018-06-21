@@ -39,8 +39,10 @@ def preprocess_rgb(X):
         img = X[i].squeeze().astype(np.uint8)
         X_eq[i] = equalize_Y_channel(img)
     ## scale to [0,1]
-    X_eq_scale = np.divide(X_eq,255.0)
-    return X_eq_scale
+    X_eq /= 255.
+    return X_eq
+    #X_eq_scale = np.divide(X_eq,255.0)
+    #return X_eq_scale
 
 def preprocess_one_rgb(img):
     img = np.array(img, dtype=np.uint8)
