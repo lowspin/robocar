@@ -85,6 +85,11 @@ class CamNode(object):
         dt = CAMNODE_DT
         rate = rospy.Rate(1/dt)
 
+        stopvel = Twist()
+        stopvel.linear.x = 0.
+        stopvel.angular.z = 0.
+
+        stoptime = -1
         imgcapture = np.zeros((IMG_WIDTH*IMG_HEIGHT*3,), dtype=np.uint8)
 
         while not rospy.is_shutdown():
@@ -97,21 +102,26 @@ class CamNode(object):
 
             # Check drive state - stop or go
             if (self.drive_state == 1):
-                vel = Twist()
-                vel.linear.x = 0.
-                vel.angular.z = 0.
-                self.my_twist_command = vel
-
-            # publish drive command
-            self.pub.publish(self.my_twist_command)
+                self.my_twist_command = stopvel
 
             # shutdown if STOP sign detected
             if (self.drive_state == 1):
                 print "========= STOP =========="
-#                time.sleep(1.)
+                # publish drive command
+                self.pub.publish(self.my_twist_command)
                 rospy.signal_shutdown("STOP sign detected")
             elif (self.drive_state == 2):
                 print "^^^^^^^^^ WARN ^^^^^^^^^^"
+                if (time.time()-stoptime>1.):
+                    # pause
+                    #self.pub.publish(stopvel)
+                    #time.sleep(1.)
+                    stoptime = time.time()
+                # resume - publish original drive command
+                self.pub.publish(self.my_twist_command)
+            else:
+                # publish drive command
+                self.pub.publish(self.my_twist_command)
 
             rate.sleep()
 

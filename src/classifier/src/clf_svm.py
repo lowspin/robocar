@@ -42,7 +42,7 @@ class SVMCLF():
         self.nhistory = 1 # tracker buffer
         self.dt = 0.1 # update interval
         self.K_detthresh_stop = 0.05 # detection threshold (factor of window count)
-        self.K_detthresh_warn = 0.2 # detection threshold (factor of window count)
+        self.K_detthresh_warn = 0.24 # detection threshold (factor of window count)
         self.K_mapthresh = 0.08 # discard threshold (factor of window count)
         self.K_stopbias = 0.4 # bias to favor STOP over WARN (factor of window count)
 
