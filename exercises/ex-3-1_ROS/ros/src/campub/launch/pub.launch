@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="campub" name="campub_node" type="campub_node.py" output="screen">
+  </node>
+</launch>

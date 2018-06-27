@@ -11,16 +11,16 @@ def warp(img):
 
   img_size = (img.shape[1], img.shape[0])
   src = np.float32(
-     [[43,26],
-      [38,58],
-      [90,26],
-      [96,58]])
+     [[37,24],
+      [31,55],
+      [83,24],
+      [88,55]])
   
   dst = np.float32(
-     [[31,23],
-      [31,71],
-      [95,23],
-      [95,71]])
+     [[31,24],
+      [31,72],
+      [95,24],
+      [95,72]])
  
   M = cv2.getPerspectiveTransform(src,dst)
   warped = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
