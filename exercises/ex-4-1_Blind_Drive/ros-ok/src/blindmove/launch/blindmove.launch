@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+
+<launch>
+
+  <!-- Load the Dead Reckon node -->
+  <node pkg="blindmove" name="blindmove_node" type="blindmove.py" output="screen">
+    <param name="max_linear_vel" value="0.2" />
+    <param name="max_angular_vel" value="1.5707" />
+    <param name="divecmdfile" value="$(find blindmove)/launch/drivecommands.csv" />
+  </node>
+
+</launch>

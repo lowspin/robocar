@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+  
+    <!-- dead reckon blind node -->
+    <include file="$(find blindmove)/launch/blindmove.launch" />
+
+    <!-- Motor driver node -->
+    <include file="$(find drivemotor)/launch/motors.launch" />
+
+</launch>
