@@ -74,7 +74,13 @@ class CamNode(object):
 
         # drive state: stop or go
         self.drive_state = 0
-        rospy.Subscriber("driver_node/drivestate", Int8, self.updateDriveState_cb)
+
+        #######################################################################
+        # TO-DO:
+        # Subscribe to topic "driver_node/drivestate" published by the classifer,
+        # and pass value to callback function updateDriveState_cb()
+        # Tips: check the message type in the publisher and assign accordingly.
+        #######################################################################
 
         self.loop()
 
