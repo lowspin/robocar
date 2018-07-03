@@ -1,0 +1,10 @@
+<launch>
+    <!-- camera controller node -->
+    <include file="$(find camcontrol)/launch/cameracontrol.launch"/>
+
+    <!-- classifier node -->
+    <!--ADD YOUR CODE HERE -->
+
+    <!-- Motor driver node -->
+    <include file="$(find drivemotor)/launch/motors.launch"/>
+</launch>
