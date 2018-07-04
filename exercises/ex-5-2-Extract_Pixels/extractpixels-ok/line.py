@@ -18,7 +18,7 @@ if (TESTMODE == 1): # use live collected images
         camera.capture(imgbuffer,'bgr')
 else: # use pre-saved images
     # open image
-    imgfile = "frame1.png"
+    imgfile = "../frame1.png"
     imgbuffer = imageio.imread(imgfile)
     # crop if necessary
     imgbuffer = imgbuffer[:min(imgbuffer.shape[0],IMG_HEIGHT),:min(imgbuffer.shape[1],IMG_WIDTH),:]

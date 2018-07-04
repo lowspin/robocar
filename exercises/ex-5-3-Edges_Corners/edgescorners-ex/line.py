@@ -5,8 +5,8 @@ import imageio
 
 TESTMODE = 0
 
-IMG_WIDTH = 128
-IMG_HEIGHT = 96
+IMG_WIDTH = 960 #128
+IMG_HEIGHT = 540 # 96
 
 if (TESTMODE == 1): # use live collected images    
     # empty numpy array to hold image
@@ -18,7 +18,7 @@ if (TESTMODE == 1): # use live collected images
         camera.capture(imgbuffer,'bgr')
 else: # use pre-saved images
     # open image
-    imgfile = "frame1.png"
+    imgfile = "../frame1.png"
     imgbuffer = imageio.imread(imgfile)
     # crop if necessary
     imgbuffer = imgbuffer[:min(imgbuffer.shape[0],IMG_HEIGHT),:min(imgbuffer.shape[1],IMG_WIDTH),:]
@@ -45,7 +45,7 @@ def warp(img):
 
 img = imgbuffer.reshape((IMG_HEIGHT,IMG_WIDTH,3))
 cv2.imwrite('01original.jpg',cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-img_warped = warp(img)
+img_warped = img #warp(img)
 cv2.imwrite('02warped.jpg',cv2.cvtColor(img_warped, cv2.COLOR_BGR2RGB))
 #-------------------------------------------#
 
