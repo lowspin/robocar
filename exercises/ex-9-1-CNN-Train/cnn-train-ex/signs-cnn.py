@@ -169,7 +169,8 @@ beta = 0.0001 # for L2 regularization - 0.0=turn off
 
 #logits = LeNet(x)
 logits, l2loss_hidden_weights, l2loss_out_weights = LeNet(x)
-cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits = logits, labels=one_hot_y)
+#cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits = logits, labels=one_hot_y)
+cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(logits = logits, labels=one_hot_y)
 
 #loss_operation = tf.reduce_mean(cross_entropy)
 loss_operation = tf.reduce_mean(cross_entropy + 
@@ -212,7 +213,7 @@ with tf.Session() as sess:
         print("Validation Accuracy = {:.3f}".format(validation_accuracy))
         print()
         
-    saver.save(sess, 'lenet')
+    saver.save(sess, './lenet')
     print("Model saved")
 
 print('CNN training done.')
