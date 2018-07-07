@@ -176,6 +176,9 @@ if visualize:
     plt.show()
 
 #######################################################
+
+# test data 
+
 del clf
 del fmean
 del fstd
@@ -186,6 +189,20 @@ svmparams = pickle.load(open('svm_params.p', 'rb')) #pickle.load(f2)
 fmean = svmparams['fmean']
 fstd = svmparams['fstd']
 print 'SVM model reloaded'
+
+# discard and use pre-saved common test data for comparison
+del X_test
+del y_test
+
+# Load pickled data
+data_test = pickle.load(open('test.p', 'rb'))
+X_test, y_test = data_test['images'], data_test['labels']
+
+# convert to numpy
+X_test = np.array(X_test)
+y_test = np.array(y_test)
+
+X_test = imagefunctions.preprocess_rgb(X_test)
 
 # test
 fvec=[]
