@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="viewsub" name="viewsub_node" type="viewsub_node.py">
+  </node>
+</launch>

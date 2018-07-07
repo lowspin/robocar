@@ -1,0 +1,7 @@
+<launch>
+    <!-- camera publisher node -->
+    <include file="$(find campub)/launch/pub.launch"/>
+
+    <!-- viewer subscriber node -->
+    <include file="$(find viewsub)/launch/sub.launch"/>
+</launch>
