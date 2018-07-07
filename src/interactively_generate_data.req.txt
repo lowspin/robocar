@@ -1,0 +1,7 @@
+pillow
+matplotlib
+pygame
+scipy
+json
+glob
+
